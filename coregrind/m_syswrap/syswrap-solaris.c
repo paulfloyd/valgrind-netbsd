@@ -8857,7 +8857,7 @@ static void door_call_pre_mem_params_data(ThreadId tid, Int fd,
    if (!VG_(clo_track_fds) && !ML_(fd_recorded)(fd)) {
       ML_(record_fd_open_named)(tid, fd);
    }
-   pathname = ML_(find_fd_recorded_by_fd)(fd);
+   pathname = VG_(find_fd_recorded_by_fd)(fd);
 
    /* Debug-only printing. */
    if (0) {

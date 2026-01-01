@@ -39,6 +39,8 @@
 #include "pub_core_clientstate.h"   // VG_(fd_hard_limit)
 #include "pub_core_mallocfree.h"    // VG_(realloc)
 #include "pub_core_syscall.h"
+#include "pub_core_syswrap.h"       // VG_(find_fd_recorded_by_fd)
+
 
 /* IMPORTANT: on Darwin it is essential to use the _nocancel versions
    of syscalls rather than the vanilla version, if a _nocancel version
@@ -210,6 +212,21 @@ Bool VG_(resolve_filename) ( Int fd, const HChar** result )
    // Failure
    *result = NULL;
    return False;
+
+# elif defined(VGO_netbsd)
+
+   /* On this platform the only way to resolve a file name is to
+    * lookup it in our recorded fd table. /proc/self/fd/# might exist
+    * but even if they do they are (sort of) hard links, not symlinks.
+    */
+   const HChar *rec = VG_(find_fd_recorded_by_fd)(fd);
+   if (rec) {
+      *result = VG_(strdup)("resolve_filename", rec);
+      return True;
+   }
+   else {
+      *result = NULL;
+      return False;
 
 #  else
 #     error Unknown OS
@@ -424,6 +441,16 @@ Int VG_(pipe) ( Int fd[2] )
    }
    return sr_isError(res) ? -1 : 0;
 #  endif
+#  elif defined(VGO_netbsd)
+   /* __NR_pipe has a strange return convention on this platform. */
+   SysRes res = VG_(do_syscall0)(__NR_pipe);
+   if (!sr_isError(res)) {
+      fd[0] = (Int)sr_Res(res);
+      fd[1] = (Int)sr_ResHI(res);
+      return 0;
+   } else {
+      return -1;
+   }
 #  else
 #    error "Unknown OS"
 #  endif
@@ -453,6 +480,10 @@ Off64T VG_(lseek) ( Int fd, Off64T offset, Int whence )
    return sr_isError(res) ? (-1) : ((ULong)sr_ResHI(res) << 32 | sr_Res(res));
 #  elif defined(VGP_amd64_solaris)
    SysRes res = VG_(do_syscall3)(__NR_lseek, fd, offset, whence);
+   vg_assert(sizeof(Off64T) == sizeof(Word));
+   return sr_isError(res) ? (-1) : sr_Res(res);
+#  elif defined(VGP_amd64_netbsd)
+   SysRes res = VG_(do_syscall4)(__NR_lseek, fd, 0, offset, whence);
    vg_assert(sizeof(Off64T) == sizeof(Word));
    return sr_isError(res) ? (-1) : sr_Res(res);
 #  else
@@ -725,11 +756,24 @@ struct vki_stat buf;
    res = VG_(do_syscall4)(__NR_fstatat, VKI_AT_FDCWD, (UWord)file_name, (UWord)&buf, VKI_AT_SYMLINK_NOFOLLOW);
 #endif
 
-#else
+#elif defined(VGO_darwin)
 
    /* check this on Darwin */
    struct vki_stat buf;
    res = VG_(do_syscall2)(__NR_lstat, (UWord)file_name, (UWord)&buf);
+
+#elif defined(VGO_netbsd)
+
+   // FIXME PJF should be __NR_fstatat
+   // FIXME PJF should be VKI_AT_FDCWD
+   // FIXME PJF should be VKI_AT_SYMLINK_NOFOLLOW
+
+   struct vki_stat buf;
+   res = VG_(do_syscall4)(SYS_fstatat, AT_FDCWD, (UWord)file_name, (UWord)&buf, AT_SYMLINK_NOFOLLOW);
+
+#else
+
+#error Unknown OS
 
 #endif
 
@@ -794,7 +838,7 @@ SysRes VG_(dup2) ( Int oldfd, Int newfd )
       return VG_(mk_SysRes_Success)(newfd);
    }
    return VG_(do_syscall3)(__NR_dup3, oldfd, newfd, 0);
-#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
+#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
    return VG_(do_syscall2)(__NR_dup2, oldfd, newfd);
 #  elif defined(VGO_solaris)
    return VG_(do_syscall3)(__NR_fcntl, oldfd, F_DUP2FD, newfd);
@@ -935,7 +979,7 @@ SysRes VG_(poll) (struct vki_pollfd *fds, Int nfds, Int timeout)
                           (UWord)fds, nfds, 
                           (UWord)(timeout >= 0 ? &timeout_ts : NULL),
                           (UWord)NULL);
-#  elif defined(VGO_linux)
+#  elif defined(VGO_linux) || defined(VGO_netbsd)
    res = VG_(do_syscall3)(__NR_poll, (UWord)fds, nfds, timeout);
 #  elif defined(VGO_freebsd)
    res = VG_(do_syscall3)(__NR_poll, (UWord)fds, nfds, timeout);

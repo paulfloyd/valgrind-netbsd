@@ -499,6 +499,21 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    else
       return False;
 
+# elif defined(VGO_netbsd)
+   /* On this platform the only way to resolve a file name is to
+    * lookup it in our recorded fd table. /proc/self/fd/# might exist
+    * but even if they do they are (sort of) hard links, not symlinks.
+    */
+   const HChar *rec = VG_(find_fd_recorded_by_fd)(fd);
+   if (rec) {
+      VG_(strncpy)(buf, rec, nbuf);
+      return True;
+   }
+   else {
+      return False;
+   }
+
+
 #  else
 #     error Unknown OS
 #  endif

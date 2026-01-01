@@ -81,6 +81,10 @@ extern void VG_(cleanup_thread) ( ThreadArchState* );
 extern void VG_(init_preopened_fds) ( void );
 extern void VG_(show_open_fds) ( const HChar* when );
 
+// Returns a pathname representing a recorded fd.
+// Returned string must not be modified nor free'd.
+extern const HChar *VG_(find_fd_recorded_by_fd)(Int fd);
+
 // When the final thread is done, where shall I call to shutdown the
 // system cleanly?  Is set once at startup (in m_main) and never
 // changes after that.  Is basically a pointer to the exit

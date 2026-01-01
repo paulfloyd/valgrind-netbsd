@@ -42,8 +42,7 @@ extern Int VG_(safe_fd) ( Int oldfd );
 extern Int VG_(fcntl)   ( Int fd, Int cmd, Addr arg );
 
 /* Convert an fd into a filename */
-//#if HAVE_DECL_F_GETPATH || defined(HAVE_SYMLINKS_IN_PROC_SELF_FD) \
-//    || defined(HAVE_SYMLINKS_IN_PROC_SELF_PATH)
+//#if HAVE_DECL_F_GETPATH || defined(HAVE_SYMLINKS_IN_PROC_SELF_FD) || defined(HAVE_SYMLINKS_IN_PROC_SELF_PATH)
 // FIXME PJF the above is wrong
 // FreeBSD has neither of the two HAVE_s but it does support resolving filenames from fds
 #if !defined(VGO_netbsd)

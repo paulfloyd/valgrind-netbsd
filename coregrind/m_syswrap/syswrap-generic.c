@@ -802,7 +802,7 @@ Bool ML_(fd_recorded)(Int fd)
 }
 
 /* Returned string must not be modified nor free'd. */
-const HChar *ML_(find_fd_recorded_by_fd)(Int fd)
+const HChar *VG_(find_fd_recorded_by_fd)(Int fd)
 {
    OpenFd *i = allocated_fds;
 
