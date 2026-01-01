@@ -56,6 +56,11 @@ valgrind_SOURCES = \
 	launcher-freebsd.c \
 	m_debuglog.c
 endif
+if VGCONF_OS_IS_NETBSD
+valgrind_SOURCES = \
+	launcher-linux.c \
+	m_debuglog.c
+endif
 
 # for valgrind coregrind building, use the LTO versions, in case they differ from non lto versions
 AR = ${LTO_AR}
