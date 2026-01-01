@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -67,7 +67,7 @@ void CLG_(set_current_fn_stack)(fn_stack* s)
 
 static cxt_hash cxts;
 
-void CLG_(init_cxt_table)()
+void CLG_(init_cxt_table)(void)
 {
    Int i;
    

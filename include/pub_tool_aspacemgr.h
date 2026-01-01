@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -112,6 +112,7 @@ typedef
       Bool    isCH;     // True --> is client heap (SkAnonC ONLY)
 #if defined(VGO_freebsd)
       Bool    isFF;     // True --> is a fixed file mapping
+      Bool    ignore_offset; // True --> we can't work out segment offset
 #endif
    }
    NSegment;
@@ -153,7 +154,7 @@ extern Bool VG_(am_is_valid_for_client) ( Addr start, SizeT len,
                                           UInt prot );
 
 /* Really just a wrapper around VG_(am_mmap_anon_float_valgrind). */
-extern void* VG_(am_shadow_alloc)(SizeT size);
+extern SysRes VG_(am_shadow_alloc)(SizeT size);
 
 /* Unmap the given address range and update the segment array
    accordingly.  This fails if the range isn't valid for valgrind. */

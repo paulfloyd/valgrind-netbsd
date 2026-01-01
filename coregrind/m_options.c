@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -93,7 +93,7 @@ Int    VG_(clo_error_exitcode) = 0;
 HChar *VG_(clo_error_markers)[2] = {NULL, NULL};
 Bool   VG_(clo_exit_on_first_error) = False;
 
-Bool   VG_(clo_show_error_list) = False;
+Int   VG_(clo_show_error_list) = 0;
 
 #if defined(VGPV_arm_linux_android) \
     || defined(VGPV_x86_linux_android) \
@@ -106,6 +106,7 @@ VgVgdb VG_(clo_vgdb)           = Vg_VgdbYes;
 #endif
 Int    VG_(clo_vgdb_poll)      = 5000; 
 Int    VG_(clo_vgdb_error)     = 999999999;
+Bool   VG_(clo_launched_with_multi)  = False;
 UInt   VG_(clo_vgdb_stop_at)   = 0;
 const HChar *VG_(clo_vgdb_prefix)    = NULL;
 const HChar *VG_(arg_vgdb_prefix)    = NULL;
@@ -150,6 +151,11 @@ Bool   VG_(clo_debug_dump_frames) = False;
 Bool   VG_(clo_trace_redir)    = False;
 enum FairSchedType
        VG_(clo_fair_sched)     = disable_fair_sched;
+/* VG_(clo_scheduling_quantum) defines the thread-scheduling timeslice,
+   in terms of the number of basic blocks we attempt to run each thread for.
+   Smaller values give finer interleaving but much increased scheduling
+   overheads. */
+Word   VG_(clo_scheduling_quantum) = 100000;
 Bool   VG_(clo_trace_sched)    = False;
 Bool   VG_(clo_profile_heap)   = False;
 UInt   VG_(clo_progress_interval) = 0; /* in seconds, 1 .. 3600,
@@ -162,6 +168,9 @@ VgXTMemory VG_(clo_xtree_memory) =  Vg_XTMemory_None;
 const HChar* VG_(clo_xtree_memory_file) = "xtmemory.kcg.%p";
 Bool VG_(clo_xtree_compress_strings) = True;
 
+#if defined(VGO_linux)
+Bool VG_(clo_enable_debuginfod) = True;
+#endif
 Int    VG_(clo_dump_error)     = 0;
 Int    VG_(clo_backtrace_size) = 12;
 Int    VG_(clo_merge_recursive_frames) = 0; // default value: no merge
@@ -173,6 +182,7 @@ XArray *VG_(clo_req_tsyms);  // array of strings
 Bool   VG_(clo_run_libc_freeres) = True;
 Bool   VG_(clo_run_cxx_freeres) = True;
 UInt   VG_(clo_track_fds)      = 0;
+UInt   VG_(clo_modify_fds)      = VG_MODIFY_FD_NO;
 Bool   VG_(clo_show_below_main)= False;
 Bool   VG_(clo_keep_debuginfo) = False;
 Bool   VG_(clo_show_emwarns)   = False;
@@ -194,7 +204,8 @@ UInt   VG_(clo_unw_stack_scan_frames) = 5;
 VgSmc VG_(clo_smc_check) = Vg_SmcAllNonFile;
 #elif defined(VGA_ppc32) || defined(VGA_ppc64be) || defined(VGA_ppc64le) \
       || defined(VGA_arm) || defined(VGA_arm64) \
-      || defined(VGA_mips32) || defined(VGA_mips64) || defined(VGA_nanomips)
+      || defined(VGA_mips32) || defined(VGA_mips64) || defined(VGA_nanomips) \
+      || defined(VGA_riscv64)
 VgSmc VG_(clo_smc_check) = Vg_SmcStack;
 #else
 #  error "Unknown arch"

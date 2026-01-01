@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -61,7 +61,7 @@
 //--------------------------------------------------------------------
 
 /* Notify the module of a new DebugInfo (called from m_debuginfo). */
-extern void VG_(redir_notify_new_DebugInfo)( const DebugInfo* );
+extern void VG_(redir_notify_new_DebugInfo)( DebugInfo* );
 
 /* Notify the module of the disappearance of a DebugInfo (also called
    from m_debuginfo). */

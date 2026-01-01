@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -66,6 +66,7 @@
 #include "pub_core_clreq.h"      // for VG_USERREQ__*
 #include "pub_core_dispatch.h"
 #include "pub_core_errormgr.h"   // For VG_(get_n_errs_found)()
+#include "pub_core_extension.h"
 #include "pub_core_gdbserver.h"  // for VG_(gdbserver)/VG_(gdbserver_activity)
 #include "pub_core_libcbase.h"
 #include "pub_core_libcassert.h"
@@ -100,11 +101,6 @@
    ------------------------------------------------------------------ */
 
 /* ThreadId and ThreadState are defined elsewhere*/
-
-/* Defines the thread-scheduling timeslice, in terms of the number of
-   basic blocks we attempt to run each thread for.  Smaller values
-   give finer interleaving but much increased scheduling overheads. */
-#define SCHEDULING_QUANTUM   100000
 
 /* If False, a fault is Valgrind-internal (ie, a bug) */
 Bool VG_(in_generated_code) = False;
@@ -282,6 +278,7 @@ const HChar* name_of_sched_event ( UInt event )
       case VEX_TRC_JMP_YIELD:          return "YIELD";
       case VEX_TRC_JMP_NODECODE:       return "NODECODE";
       case VEX_TRC_JMP_MAPFAIL:        return "MAPFAIL";
+      case VEX_TRC_JMP_EXTENSION:      return "EXTENSION";
       case VEX_TRC_JMP_SYS_SYSCALL:    return "SYSCALL";
       case VEX_TRC_JMP_SYS_INT32:      return "INT32";
       case VEX_TRC_JMP_SYS_INT128:     return "INT128";
@@ -309,8 +306,8 @@ ThreadId VG_(alloc_ThreadState) ( void )
    Int i;
    for (i = 1; i < VG_N_THREADS; i++) {
       if (VG_(threads)[i].status == VgTs_Empty) {
-	 VG_(threads)[i].status = VgTs_Init;
-	 VG_(threads)[i].exitreason = VgSrc_None;
+         VG_(threads)[i].status = VgTs_Init;
+         VG_(threads)[i].exitreason = VgSrc_None;
          if (VG_(threads)[i].thread_name)
             VG_(free)(VG_(threads)[i].thread_name);
          VG_(threads)[i].thread_name = NULL;
@@ -469,9 +466,9 @@ void VG_(get_thread_out_of_syscall)(ThreadId tid)
 
    if (VG_(threads)[tid].status == VgTs_WaitSys) {
       if (VG_(clo_trace_signals)) {
-	 VG_(message)(Vg_DebugMsg, 
+         VG_(message)(Vg_DebugMsg,
                       "get_thread_out_of_syscall zaps tid %u lwp %d\n",
-		      tid, VG_(threads)[tid].os_state.lwpid);
+                      tid, VG_(threads)[tid].os_state.lwpid);
       }
 #     if defined(VGO_darwin)
       {
@@ -573,7 +570,6 @@ static void os_state_clear(ThreadState *tst)
    tst->os_state.remote_port       = 0;
    tst->os_state.msgh_id           = 0;
    VG_(memset)(&tst->os_state.mach_args, 0, sizeof(tst->os_state.mach_args));
-
 #  elif defined(VGO_solaris)
 #  if defined(VGP_x86_solaris)
    tst->os_state.thrptr = 0;
@@ -605,7 +601,7 @@ void mostly_clear_thread_record ( ThreadId tid )
 {
    vki_sigset_t savedmask;
 
-   vg_assert(tid >= 0 && tid < VG_N_THREADS);
+   vg_assert(tid < VG_N_THREADS);
    VG_(cleanup_thread)(&VG_(threads)[tid].arch);
    VG_(threads)[tid].tid = tid;
 
@@ -662,7 +658,7 @@ static void sched_fork_cleanup(ThreadId me)
    for (tid = 1; tid < VG_N_THREADS; tid++) {
       if (tid != me) {
          mostly_clear_thread_record(tid);
-	 VG_(threads)[tid].status = VgTs_Empty;
+         VG_(threads)[tid].status = VgTs_Empty;
          VG_(clear_syscallInfo)(tid);
       }
    }
@@ -764,20 +760,20 @@ void VG_(scheduler_init_phase2) ( ThreadId tid_main,
 /* Use gcc's built-in setjmp/longjmp.  longjmp must not restore signal
    mask state, but does need to pass "val" through.  jumped must be a
    volatile UWord. */
-#define SCHEDSETJMP(tid, jumped, stmt)					\
-   do {									\
-      ThreadState * volatile _qq_tst = VG_(get_ThreadState)(tid);	\
-									\
-      (jumped) = VG_MINIMAL_SETJMP(_qq_tst->sched_jmpbuf);              \
-      if ((jumped) == ((UWord)0)) {                                     \
-	 vg_assert(!_qq_tst->sched_jmpbuf_valid);			\
-	 _qq_tst->sched_jmpbuf_valid = True;				\
-	 stmt;								\
-      }	else if (VG_(clo_trace_sched))					\
-	 VG_(printf)("SCHEDSETJMP(line %d) tid %u, jumped=%lu\n",       \
-                     __LINE__, tid, jumped);                            \
-      vg_assert(_qq_tst->sched_jmpbuf_valid);				\
-      _qq_tst->sched_jmpbuf_valid = False;				\
+#define SCHEDSETJMP(tid, jumped, stmt)                            \
+   do {                                                           \
+      ThreadState * volatile _qq_tst = VG_(get_ThreadState)(tid); \
+                                                                  \
+      (jumped) = VG_MINIMAL_SETJMP(_qq_tst->sched_jmpbuf);        \
+      if ((jumped) == ((UWord)0)) {                               \
+         vg_assert(!_qq_tst->sched_jmpbuf_valid);                 \
+         _qq_tst->sched_jmpbuf_valid = True;                      \
+         stmt;                                                    \
+      }	else if (VG_(clo_trace_sched))                           \
+         VG_(printf)("SCHEDSETJMP(line %d) tid %u, jumped=%lu\n", \
+                     __LINE__, tid, jumped);                      \
+      vg_assert(_qq_tst->sched_jmpbuf_valid);                     \
+      _qq_tst->sched_jmpbuf_valid = False;                        \
    } while(0)
 
 
@@ -901,6 +897,10 @@ static void do_pre_run_checks ( volatile ThreadState* tst )
 #  if defined(VGA_mips32) || defined(VGA_mips64)
    /* no special requirements */
 #  endif
+
+#  if defined(VGA_riscv64)
+   /* no special requirements */
+#  endif
 }
 
 // NO_VGDB_POLL value ensures vgdb is not polled, while
@@ -1013,7 +1013,9 @@ void run_thread_for_a_while ( /*OUT*/HWord* two_words,
 #  if defined(VGP_mips32_linux) || defined(VGP_mips64_linux) \
       || defined(VGP_nanomips_linux)
    tst->arch.vex.guest_LLaddr = (RegWord)(-1);
-#  elif defined(VGP_arm64_linux)
+#  elif defined(VGP_arm64_linux) || defined(VGP_arm64_freebsd)
+   tst->arch.vex.guest_LLSC_SIZE = 0;
+#  elif defined(VGP_riscv64_linux)
    tst->arch.vex.guest_LLSC_SIZE = 0;
 #  endif
 
@@ -1233,6 +1235,29 @@ static void handle_syscall(ThreadId tid, UInt trc)
    }
 }
 
+static void handle_extension(ThreadId tid)
+{
+   volatile UWord jumped;
+   enum ExtensionError err;
+
+   SCHEDSETJMP(tid, jumped, err = VG_(client_extension)(tid));
+   vg_assert(VG_(is_running_thread)(tid));
+
+   if (jumped != (UWord)0) {
+      block_signals();
+      VG_(poll_signals)(tid);
+   } else if (err != ExtErr_OK) {
+      Addr addr = VG_(get_IP)(tid);
+      switch (err) {
+      case ExtErr_Illop:
+         VG_(synth_sigill)(tid, addr);
+         break;
+      default:
+         VG_(core_panic)("scheduler: bad return code from extension");
+      }
+   }
+}
+
 /* tid just requested a jump to the noredir version of its current
    program counter.  So make up that translation if needed, run it,
    and return the resulting thread return code in two_words[]. */
@@ -1353,8 +1378,36 @@ VgSchedReturnCode VG_(scheduler) ( ThreadId tid )
                to be added without risk of overflow. */
          }
       } else {
-          VG_(debugLog)(0,"sched",
-                        "WARNING: pthread stack cache cannot be disabled!\n");
+          /*
+           * glibc 2.34 no longer has stack_cache_actsize as a visible variable
+           * so we switch to using the GLIBC_TUNABLES env var. Processing for that
+           * is done in initimg-linux.c / setup_client_env  for all glibc
+           *
+           * If we don't detect stack_cache_actsize we want to be able to tell
+           * whether it is an unexpected error or if it is no longer there.
+           * In the latter case we don't print a warning.
+           */
+          Bool print_warning = True;
+          if (VG_(client__gnu_get_libc_version_addr) != NULL) {
+              const HChar* gnu_libc_version = VG_(client__gnu_get_libc_version_addr)();
+              if (gnu_libc_version != NULL) {
+                  HChar* glibc_version_tok = VG_(strdup)("scheduler.1", gnu_libc_version);
+                  const HChar* str_major = VG_(strtok)(glibc_version_tok, ".");
+                  Long major = VG_(strtoll10)(str_major, NULL);
+                  const HChar* str_minor = VG_(strtok)(NULL, ".");
+                  Long minor = VG_(strtoll10)(str_minor, NULL);
+                  if (major >= 2 && minor >= 34) {
+                      print_warning = False;
+                  }
+                  VG_(free)(glibc_version_tok);
+              }
+          } else {
+
+          }
+          if (print_warning) {
+              VG_(debugLog)(0,"sched",
+                            "WARNING: pthread stack cache cannot be disabled!\n");
+          }
           VG_(clo_sim_hints) &= ~SimHint2S(SimHint_no_nptl_pthread_stackcache);
           /* Remove SimHint_no_nptl_pthread_stackcache from VG_(clo_sim_hints)
              to avoid having a msg for all following threads. */
@@ -1366,7 +1419,7 @@ VgSchedReturnCode VG_(scheduler) ( ThreadId tid )
    
    vg_assert(VG_(is_running_thread)(tid));
 
-   dispatch_ctr = SCHEDULING_QUANTUM;
+   dispatch_ctr = VG_(clo_scheduling_quantum);
 
    while (!VG_(is_exiting)(tid)) {
 
@@ -1417,7 +1470,7 @@ VgSchedReturnCode VG_(scheduler) ( ThreadId tid )
 	 n_scheduling_events_MAJOR++;
 
 	 /* Figure out how many bbs to ask vg_run_innerloop to do. */
-         dispatch_ctr = SCHEDULING_QUANTUM;
+         dispatch_ctr = VG_(clo_scheduling_quantum);
 
 	 /* paranoia ... */
 	 vg_assert(tst->tid == tid);
@@ -1524,6 +1577,11 @@ VgSchedReturnCode VG_(scheduler) ( ThreadId tid )
 	 do_client_request(tid);
 	 break;
 
+      case VEX_TRC_JMP_EXTENSION: {
+         handle_extension(tid);
+         break;
+      }
+
       case VEX_TRC_JMP_SYS_INT128:  /* x86-linux */
       case VEX_TRC_JMP_SYS_INT129:  /* x86-darwin */
       case VEX_TRC_JMP_SYS_INT130:  /* x86-darwin */
@@ -1532,7 +1590,7 @@ VgSchedReturnCode VG_(scheduler) ( ThreadId tid )
       /* amd64-linux, ppc32-linux, amd64-darwin, amd64-solaris */
       case VEX_TRC_JMP_SYS_SYSCALL:
 	 handle_syscall(tid, trc[0]);
-	 if (VG_(clo_sanity_level) > 2)
+         if (VG_(clo_sanity_level) >= 3)
 	    VG_(sanity_check_general)(True); /* sanity-check every syscall */
 	 break;
 
@@ -1803,6 +1861,9 @@ void VG_(nuke_all_threads_except) ( ThreadId me, VgSchedReturnCode src )
 #elif defined(VGA_mips32) || defined(VGA_mips64) || defined(VGA_nanomips)
 #  define VG_CLREQ_ARGS       guest_r12
 #  define VG_CLREQ_RET        guest_r11
+#elif defined(VGA_riscv64)
+#  define VG_CLREQ_ARGS       guest_x14
+#  define VG_CLREQ_RET        guest_x13
 #else
 #  error Unknown arch
 #endif
@@ -1925,7 +1986,7 @@ Int print_client_message( ThreadId tid, const HChar *format,
       VG_(get_and_pp_StackTrace)( tid, VG_(clo_backtrace_size) );
    
    if (VG_(clo_xml))
-      VG_(printf_xml)( "</clientmsg>\n" );
+      VG_(printf_xml)( "</clientmsg>\n\n" );
 
    return count;
 }
@@ -2088,9 +2149,14 @@ void do_client_request ( ThreadId tid )
 	 info->tl___builtin_vec_delete = VG_(tdict).tool___builtin_vec_delete;
 	 info->tl___builtin_vec_delete_aligned = VG_(tdict).tool___builtin_vec_delete_aligned;
 	 info->tl_malloc_usable_size   = VG_(tdict).tool_malloc_usable_size;
-
+#if defined(VGO_linux) || defined(VGO_solaris)
 	 info->mallinfo                = VG_(mallinfo);
+#endif
+#if defined(VGO_linux)
+	 info->mallinfo2               = VG_(mallinfo2);
+#endif
 	 info->clo_trace_malloc        = VG_(clo_trace_malloc);
+         info->clo_realloc_zero_bytes_frees    = VG_(clo_realloc_zero_bytes_frees);
 
          SET_CLREQ_RETVAL( tid, 0 );     /* return value is meaningless */
 
@@ -2351,7 +2417,7 @@ void VG_(sanity_check_general) ( Bool force_expensive )
       Gradually increase the interval between such checks so as not to
       burden long-running programs too much. */
    if ( force_expensive
-        || VG_(clo_sanity_level) > 1
+        || VG_(clo_sanity_level) >= 2
         || (VG_(clo_sanity_level) == 1 
             && sanity_fast_count == next_slow_check_at)) {
 
@@ -2391,7 +2457,7 @@ void VG_(sanity_check_general) ( Bool force_expensive )
       }
    }
 
-   if (VG_(clo_sanity_level) > 1) {
+   if (VG_(clo_sanity_level) >= 2) {
       /* Check sanity of the low-level memory manager.  Note that bugs
          in the client's code can cause this to fail, so we don't do
          this check unless specially asked for.  And because it's

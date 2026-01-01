@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -70,7 +70,6 @@ struct vg_stat {
 };
 
 extern SysRes VG_(mknod)  ( const HChar* pathname, Int mode, UWord dev );
-extern SysRes VG_(mkfifo) ( const HChar* pathname, Int mode );
 extern SysRes VG_(open)   ( const HChar* pathname, Int flags, Int mode );
 /* fd_open words like the open(2) system call: 
    returns fd if success, -1 otherwise */
@@ -82,6 +81,7 @@ extern Int    VG_(pipe)   ( Int fd[2] );
 extern Off64T VG_(lseek)  ( Int fd, Off64T offset, Int whence );
 
 extern SysRes VG_(stat)   ( const HChar* file_name, struct vg_stat* buf );
+extern SysRes VG_(lstat)  ( const HChar* file_name, struct vg_stat* buf );
 extern Int    VG_(fstat)  ( Int   fd,        struct vg_stat* buf );
 extern SysRes VG_(dup)    ( Int oldfd );
 extern SysRes VG_(dup2)   ( Int oldfd, Int newfd );

@@ -14,7 +14,7 @@
 	
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -217,6 +217,48 @@ VG_(amd64_linux_REDIR_FOR_strlen):
 .L41:	ret
 .LfnE5:
 .size VG_(amd64_linux_REDIR_FOR_strlen), .-VG_(amd64_linux_REDIR_FOR_strlen)
+
+/* There's no particular reason that this needs to be handwritten
+   assembly, but since that's what this file contains, here's a
+   simple strcmp.)
+*/
+.global VG_(amd64_linux_REDIR_FOR_strcmp)
+.type   VG_(amd64_linux_REDIR_FOR_strcmp), @function
+VG_(amd64_linux_REDIR_FOR_strcmp):
+	xorl	%ecx, %ecx
+1:
+	movzbl	(%rdi, %rcx), %eax
+	movzbl	(%rsi, %rcx), %edx
+	testb	%al, %al
+	jne	2f
+	movl	%edx, %eax
+	negl	%eax
+	ret
+2:
+	incq	%rcx
+	subl	%edx, %eax
+	je	1b
+	ret
+.size VG_(amd64_linux_REDIR_FOR_strcmp), .-VG_(amd64_linux_REDIR_FOR_strcmp)
+
+.global VG_(amd64_linux_REDIR_FOR_memcmp)
+.type   VG_(amd64_linux_REDIR_FOR_memcmp), @function
+VG_(amd64_linux_REDIR_FOR_memcmp):
+	xorl	%ecx, %ecx
+	jmp	2f
+1:
+	movzbl	(%rdi, %rcx), %eax
+	movzbl	(%rsi, %rcx), %r8d
+	addq	$1, %rcx
+	subl	%r8d, %eax
+	jne	3f
+2:
+	cmpq	%rcx, %rdx
+	jne	1b
+	xorl	%eax, %eax
+3:
+	ret
+.size VG_(amd64_linux_REDIR_FOR_memcmp), .-VG_(amd64_linux_REDIR_FOR_memcmp)
 
 .global VG_(amd64_linux_REDIR_FOR_index)
 .type   VG_(amd64_linux_REDIR_FOR_index), @function
@@ -562,6 +604,51 @@ VG_(ppc64_linux_REDIR_FOR_strchr):
 .L1end:
 
 	
+	/* this function is written using the "dotless" ABI convention */
+	.align 2
+	.globl VG_(ppc64_linux_REDIR_FOR_strcmp)
+#if !defined VGP_ppc64be_linux || _CALL_ELF == 2
+        /* Little Endian uses ELF version 2 */
+        .type VG_(ppc64_linux_REDIR_FOR_strcmp),@function
+VG_(ppc64_linux_REDIR_FOR_strcmp):
+#else
+        /* Big Endian uses ELF version 1 */
+	.section        ".opd","aw"
+	.align 3
+VG_(ppc64_linux_REDIR_FOR_strcmp):
+	.quad   .L.VG_(ppc64_linux_REDIR_FOR_strcmp),.TOC.@tocbase,0
+	.previous
+	.size	VG_(ppc64_linux_REDIR_FOR_strcmp), \
+			.LFE0-.L.VG_(ppc64_linux_REDIR_FOR_strcmp)
+	.type	VG_(ppc64_linux_REDIR_FOR_strcmp), @function
+
+.L.VG_(ppc64_linux_REDIR_FOR_strcmp):
+#endif
+#if _CALL_ELF == 2
+0:      addis        2,12,.TOC.-0b@ha
+        addi         2,2,.TOC.-0b@l
+        .localentry  VG_(ppc64_linux_REDIR_FOR_strcmp), .-VG_(ppc64_linux_REDIR_FOR_strcmp)
+#endif
+.LFB0:
+        .cfi_startproc
+        li 10,0
+.L3:
+        lbzx 8,3,10
+        lbzx 9,4,10
+        cmpwi 0,8,0
+        beq 0,.L2
+        cmpw 0,8,9
+        addi 10,10,1
+        beq 0,.L3
+.L2:
+        subf 3,9,8
+        extsw 3,3
+        blr
+        .long 0
+        .byte 0,0,0,0,0,0,0,0
+        .cfi_endproc
+.LFE0:
+
 .global VG_(trampoline_stuff_end)
 VG_(trampoline_stuff_end):
 
@@ -873,7 +960,7 @@ VG_(x86_freebsd_SUBST_FOR_sigreturn):
 	pushl	%eax
 	pushl	%eax			/* fake return addr */
 /*	movl	0x44(%eax), %gs	; restore %gs, not done by sigreturn */
-        movl    $__NR_fake_sigreturn, %eax
+        movl    $__NR_freebsd_fake_sigreturn, %eax
         int     $0x80
         ud2
 
@@ -900,7 +987,7 @@ VG_(amd64_freebsd_SUBST_FOR_sigreturn):
         /* This is a very specific sequence which GDB uses to
            recognize signal handler frames. */
 
-        movq    $__NR_fake_sigreturn, %rax
+        movq    $__NR_freebsd_fake_sigreturn, %rax
 
         /* running the preprocessor on
          * src/amd64.amd64/lib/libc/sigreturn.S
@@ -939,6 +1026,48 @@ VG_(trampoline_stuff_end):
 #	undef UD2_1024
 #	undef UD2_PAGE
 
+/*---------------- arm64-freebsd ----------------*/
+#else
+#if defined(VGP_arm64_freebsd)
+
+#       define UD2_4      .word 0xFFFFFFFF
+#	define UD2_16     UD2_4    ; UD2_4    ; UD2_4    ; UD2_4
+#	define UD2_64     UD2_16   ; UD2_16   ; UD2_16   ; UD2_16
+#	define UD2_256    UD2_64   ; UD2_64   ; UD2_64   ; UD2_64
+#	define UD2_1024   UD2_256  ; UD2_256  ; UD2_256  ; UD2_256
+#	define UD2_PAGE   UD2_1024 ; UD2_1024 ; UD2_1024 ; UD2_1024
+
+	/* a leading page of unexecutable code */
+	UD2_PAGE
+
+.global VG_(trampoline_stuff_start)
+VG_(trampoline_stuff_start):
+
+.global VG_(arm64_freebsd_SUBST_FOR_sigreturn)
+.type   VG_(arm64_freebsd_SUBST_FOR_sigreturn),#function
+VG_(arm64_freebsd_SUBST_FOR_sigreturn):
+	mov x8, # __NR_freebsd_fake_sigreturn
+        mov x0, sp
+        svc #0
+        .long 0xFFFFFFFF /*illegal insn*/
+.size VG_(arm64_freebsd_SUBST_FOR_sigreturn), \
+        .-VG_(arm64_freebsd_SUBST_FOR_sigreturn)
+
+.global VG_(trampoline_stuff_end)
+VG_(trampoline_stuff_end):
+
+	/* and a trailing page of unexecutable code */
+	UD2_PAGE
+
+#	undef UD2_4
+#	undef UD2_16
+#	undef UD2_64
+#	undef UD2_256
+#	undef UD2_1024
+#	undef UD2_PAGE
+
+
+
 /*---------------- x86-darwin ----------------*/
 #else
 #if defined(VGP_x86_darwin)
@@ -953,7 +1082,7 @@ VG_(trampoline_stuff_start):
 VG_(x86_darwin_SUBST_FOR_sigreturn):
         /* XXX does this need to have any special form? (cf x86-linux
 	version) */
-        movl    $ __NR_DARWIN_FAKE_SIGRETURN, %eax
+        movl    $ __NR_darwin_fake_sigreturn, %eax
         int     $0x80
         ud2
 
@@ -1113,7 +1242,7 @@ VG_(trampoline_stuff_start):
 VG_(amd64_darwin_SUBST_FOR_sigreturn):
         /* XXX does this need to have any special form? (cf x86-linux
 	version) */
-        movq    $ __NR_DARWIN_FAKE_SIGRETURN, %rax
+        movq    $ __NR_darwin_fake_sigreturn, %rax
         syscall
         ud2
 
@@ -1520,6 +1649,98 @@ VG_(trampoline_stuff_end):
 #	undef UD2_1024
 #	undef UD2_PAGE
 
+/*---------------- riscv64-linux ----------------*/
+#else
+#if defined(VGP_riscv64_linux)
+
+#	define UD2_4      .word 0
+#	define UD2_16     UD2_4    ; UD2_4    ; UD2_4    ; UD2_4
+#	define UD2_64     UD2_16   ; UD2_16   ; UD2_16   ; UD2_16
+#	define UD2_256    UD2_64   ; UD2_64   ; UD2_64   ; UD2_64
+#	define UD2_1024   UD2_256  ; UD2_256  ; UD2_256  ; UD2_256
+#	define UD2_PAGE   UD2_1024 ; UD2_1024 ; UD2_1024 ; UD2_1024
+
+	/* a leading page of unexecutable code */
+	UD2_PAGE
+
+.global VG_(trampoline_stuff_start)
+VG_(trampoline_stuff_start):
+
+.global VG_(riscv64_linux_SUBST_FOR_rt_sigreturn)
+.type   VG_(riscv64_linux_SUBST_FOR_rt_sigreturn), @function
+VG_(riscv64_linux_SUBST_FOR_rt_sigreturn):
+	.cfi_startproc
+	.cfi_signal_frame
+	li a7, __NR_rt_sigreturn
+	ecall
+	.cfi_endproc
+.size VG_(riscv64_linux_SUBST_FOR_rt_sigreturn), \
+	.-VG_(riscv64_linux_SUBST_FOR_rt_sigreturn)
+
+.global VG_(riscv64_linux_REDIR_FOR_strlen)
+.type   VG_(riscv64_linux_REDIR_FOR_strlen), @function
+VG_(riscv64_linux_REDIR_FOR_strlen):
+	mv a1, a0               /* copy the input string pointer to a1 */
+	li a0, 0                /* set the output length to 0 */
+	lbu a2, 0(a1)           /* load the first character */
+	beq a2, zero, 2f        /* check if the end of string is reached */
+1:
+	addi a0, a0, 1          /* increment the output length by 1 */
+	add a2, a1, a0          /* calculate address of the next character */
+	lbu a2, 0(a2)           /* load the next character */
+	bne a2, zero, 1b        /* check if the end of string is reached */
+	ret
+2:
+	ret
+.size VG_(riscv64_linux_REDIR_FOR_strlen), .-VG_(riscv64_linux_REDIR_FOR_strlen)
+
+.global VG_(riscv64_linux_REDIR_FOR_index)
+.type   VG_(riscv64_linux_REDIR_FOR_index), @function
+VG_(riscv64_linux_REDIR_FOR_index):
+	andi a1, a1, 0xff      /* mask the input character value */
+	j 2f                   /* jump into the test loop */
+1:
+	beq a2, zero, 3f       /* check if the end of string is reached */
+	addi a0, a0, 1         /* advance to the next character */
+2:
+	lbu a2, 0(a0)          /* load the next character */
+	bne a2, a1, 1b         /* check if it matches the looked up character */
+	ret
+3:
+	li a0, 0               /* set the result to "not found" */
+	ret
+.size VG_(riscv64_linux_REDIR_FOR_index), .-VG_(riscv64_linux_REDIR_FOR_index)
+
+.global VG_(riscv64_linux_REDIR_FOR_strcmp)
+.type   VG_(riscv64_linux_REDIR_FOR_strcmp), @function
+VG_(riscv64_linux_REDIR_FOR_strcmp):
+0:
+	lbu a5, 0(a0)          /* load *s1 */
+	lbu a4, 0(a1)          /* load *s2 */
+	beqz a5, 1f            /* check end of s1 */
+	beq a5, a4, 2f         /* loop if *s1 == *s2 */
+1:
+	subw a0, a5, a4        /* return value is *s1 - *s2 */
+	ret
+2:
+	addi a0, a0, 1         /* next char in s1 */
+	addi a1, a1, 1         /* next char in s2 */
+        j 0b                   /* and back to the start */
+.size VG_(riscv64_linux_REDIR_FOR_strcmp), .-VG_(riscv64_linux_REDIR_FOR_strcmp)
+
+.global VG_(trampoline_stuff_end)
+VG_(trampoline_stuff_end):
+
+	/* and a trailing page of unexecutable code */
+	UD2_PAGE
+
+#	undef UD2_4
+#	undef UD2_16
+#	undef UD2_64
+#	undef UD2_256
+#	undef UD2_1024
+#	undef UD2_PAGE
+
 /*---------------- x86-solaris ----------------*/
 #else
 #if defined(VGP_x86_solaris)
@@ -1713,6 +1934,8 @@ VG_(trampoline_stuff_end):
 #else
 #  error Unknown platform
 
+#endif
+#endif
 #endif
 #endif
 #endif

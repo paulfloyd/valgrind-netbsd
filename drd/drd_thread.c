@@ -5,7 +5,7 @@
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -1681,7 +1681,7 @@ ULong DRD_(thread_get_discard_ordered_segments_count)(void)
 }
 
 /** Return how many times the conflict set has been updated entirely. */
-ULong DRD_(thread_get_compute_conflict_set_count)()
+ULong DRD_(thread_get_compute_conflict_set_count)(void)
 {
    return s_compute_conflict_set_count;
 }

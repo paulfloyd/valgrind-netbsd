@@ -1,4 +1,5 @@
 #! /bin/sh
+# @configure_input@
 
 dir=`dirname $0`
 
@@ -18,8 +19,14 @@ fi |
 
 # And FreeBSD
 if $dir/../../tests/os_test freebsd; then
-   #perl -p $dir/filter_stderr_freebsd
    awk -f $dir/filter_freebsd.awk
+else
+   cat
+fi |
+
+# And Darwin
+if $dir/../../tests/os_test darwin; then
+   awk -f $dir/filter_darwin.awk
 else
    cat
 fi |
@@ -59,6 +66,9 @@ $SED \
 
 # Some arches return ENOSYS instead of EINVAL for undefined futex operations.
 $SED -e "s/with error code 38 (ENOSYS: Function not implemented)/with error code 22 (EINVAL: Invalid argument)/" |
+
+# filter differences in pthread_cond_signal
+$SED -e "s/pthread_cond_signal@\*/pthread_cond_signal/" |
 
 $dir/../../helgrind/tests/filter_helgrind "$@"
 

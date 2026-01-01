@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -72,7 +72,8 @@ static inline UWord VG_TT_FAST_HASH ( Addr guest ) {
    return merged & VG_TT_FAST_MASK;
 }
 
-#elif defined(VGA_s390x) || defined(VGA_arm) || defined(VGA_nanomips)
+#elif defined(VGA_s390x) || defined(VGA_arm) || defined(VGA_nanomips) \
+      || defined(VGA_riscv64)
 static inline UWord VG_TT_FAST_HASH ( Addr guest ) {
    // Instructions are 2-byte aligned.
    UWord merged = ((UWord)guest) >> 1;
@@ -200,8 +201,8 @@ extern void VG_(discard_translations) ( Addr  start, ULong range,
 
 extern void VG_(print_tt_tc_stats) ( void );
 
-extern UInt VG_(get_bbs_translated) ( void );
-extern UInt VG_(get_bbs_discarded_or_dumped) ( void );
+extern ULong VG_(get_bbs_translated) ( void );
+extern ULong VG_(get_bbs_discarded_or_dumped) ( void );
 
 /* Add to / search the auxiliary, small, unredirected translation
    table. */

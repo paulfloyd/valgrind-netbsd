@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -52,6 +52,8 @@ extern void VG_(clear_syscallInfo) ( ThreadId tid );
 // Returns True if the given thread is currently in a system call
 extern Bool VG_(is_in_syscall) ( ThreadId tid );
 
+extern Bool VG_(is_in_kernel_restart_syscall) ( ThreadId tid );
+
 // If VG_(is_in_syscall) (tid), returns the sysno the given thread is in
 extern Word VG_(is_in_syscall_no) (ThreadId tid );
 
@@ -79,10 +81,6 @@ extern void VG_(cleanup_thread) ( ThreadArchState* );
 extern void VG_(init_preopened_fds) ( void );
 extern void VG_(show_open_fds) ( const HChar* when );
 
-// Returns a pathname representing a recorded fd.
-// Returned string must not be modified nor free'd.
-extern const HChar *VG_(find_fd_recorded_by_fd)(Int fd);
-
 // When the final thread is done, where shall I call to shutdown the
 // system cleanly?  Is set once at startup (in m_main) and never
 // changes after that.  Is basically a pointer to the exit
@@ -106,6 +104,12 @@ extern void VG_(track_client_dataseg)(ThreadId tid);
 #if defined(VGO_freebsd)
 extern Bool VG_(get_capability_mode)(void);
 #endif
+
+// For the core errors
+extern Bool fd_eq_Error (VgRes, const Error*, const Error*);
+extern void fd_before_pp_Error (const Error*);
+extern void fd_pp_Error (const Error*);
+extern UInt fd_update_extra (const Error*);
 
 #if defined(VGO_netbsd)
 extern void VG_(save_context)(ThreadId tid, vki_ucontext_t *uc,

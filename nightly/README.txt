@@ -26,6 +26,11 @@ If the two trees are identical, the tests are not run and no results are
 emailed.  This avoids spamming people with uninteresting results emails when
 no commits have happened recently.
 
+The requirements for the machine running the nightly tests are the same as
+for running the regression tests (see README_DEVELOPERS) plus GNU coreutils
+and the ability to send e-mail. The mail transport agent used depends on the
+platform and is decribed in step (4) below.
+
 
 SETTING UP
 ----------
@@ -33,7 +38,7 @@ To set up nightly testing for a machine, do the following.
 
 (1) Clone a shallow copy from the repository, eg:
 
-        git clone --depth 1 git://sourceware.org/git/valgrind.git/ $DIR
+        git clone --depth 1 https://sourceware.org/git/valgrind.git/ $DIR
 
     where $DIR is the name of the directory you want it to be in.
     You'll probably want to include "nightly" in the directory name.

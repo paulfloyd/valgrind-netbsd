@@ -4,7 +4,7 @@
 
    Notice that the following BSD-style license applies to this one
    file (dhat.h) only.  The rest of Valgrind is licensed under the
-   terms of the GNU General Public License, version 2, unless
+   terms of the GNU General Public License, version 3, unless
    otherwise indicated.  See the COPYING file in the source
    distribution for details.
 
@@ -50,17 +50,21 @@
 
    Notice that the above BSD-style license applies to this one file
    (memcheck.h) only.  The entire rest of Valgrind is licensed under
-   the terms of the GNU General Public License, version 2.  See the
+   the terms of the GNU General Public License, version 3.  See the
    COPYING file in the source distribution for details.
 
    ----------------------------------------------------------------
 */
+
+#if !defined(VALGRIND_DHAT_H)
+#define VALGRIND_DHAT_H
 
 #include "valgrind.h"
 
 typedef
    enum {
       VG_USERREQ__DHAT_AD_HOC_EVENT = VG_USERREQ_TOOL_BASE('D', 'H'),
+      VG_USERREQ__DHAT_HISTOGRAM_MEMORY,
 
       // This is just for DHAT's internal use. Don't use it.
       _VG_USERREQ__DHAT_COPY = VG_USERREQ_TOOL_BASE('D','H') + 256
@@ -72,4 +76,11 @@ typedef
 #define DHAT_AD_HOC_EVENT(_qzz_weight) \
     VALGRIND_DO_CLIENT_REQUEST_STMT(VG_USERREQ__DHAT_AD_HOC_EVENT, \
                                     (_qzz_weight), 0, 0, 0, 0)
+
+// for access count histograms of memory larger than 1k
+#define DHAT_HISTOGRAM_MEMORY(_qzz_address) \
+    VALGRIND_DO_CLIENT_REQUEST_STMT(VG_USERREQ__DHAT_HISTOGRAM_MEMORY, \
+                                    (_qzz_address), 0, 0, 0, 0)
+
+#endif
 

@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -41,6 +41,7 @@
 #include "pub_core_mallocfree.h"    // VG_(malloc), VG_(free)
 #include "pub_core_vkiscnums.h"
 #include "pub_core_syscall.h"       // VG_(strerror)
+#include "pub_core_clientstate.h"
 #include "pub_core_ume.h"           // self
 
 #include "priv_ume.h"
@@ -76,7 +77,6 @@ struct elfinfo
    ESZ(Ehdr)    e;
    ESZ(Phdr)    *p;
    Int          fd;
-   HChar        *fn;
 };
 
 #if defined(VGO_linux)
@@ -337,7 +337,6 @@ struct elfinfo *readelf(Int fd, const HChar *filename)
    Int phsz;
 
    e->fd = fd;
-   e->fn = VG_(strdup)("ume.re.1", filename);
 
    sres = VG_(pread)(fd, &e->e, sizeof(e->e), 0);
    if (sr_isError(sres) || sr_Res(sres) != sizeof(e->e)) {
@@ -389,7 +388,6 @@ struct elfinfo *readelf(Int fd, const HChar *filename)
    return e;
 
   bad:
-   VG_(free)(e->fn);
    VG_(free)(e);
    return NULL;
 }
@@ -448,12 +446,11 @@ ESZ(Addr) mapelf(struct elfinfo *e, ESZ(Addr) base)
       // The condition handles the case of a zero-length segment.
       if (VG_PGROUNDUP(bss)-VG_PGROUNDDN(addr) > 0) {
          if (0) VG_(debugLog)(0,"ume","mmap_file_fixed_client #1\n");
-         res = VG_(am_mmap_named_file_fixed_client)(
+         res = VG_(am_mmap_file_fixed_client)(
                   VG_PGROUNDDN(addr),
                   VG_PGROUNDUP(bss)-VG_PGROUNDDN(addr),
                   prot, /*VKI_MAP_FIXED|VKI_MAP_PRIVATE, */
-                  e->fd, VG_PGROUNDDN(off),
-                  e->fn
+                  e->fd, VG_PGROUNDDN(off)
                );
          if (0) VG_(am_show_nsegments)(0,"after #1");
          check_mmap(res, VG_PGROUNDDN(addr),
@@ -516,8 +513,8 @@ Bool VG_(match_ELF)(const void *hdr, SizeT len)
      required.  mapelf() returns the address just beyond the end of
      the furthest-along mapping it creates.  The executable is mapped
      starting at EBASE, which is usually read from it (eg, 0x8048000
-     etc) except if it's a PIE, in which case I'm not sure what
-     happens.
+     etc) except if it's a PIE, in which case aspacem is queried for
+     the first adequately sized segment.
 
      The returned address is recorded in info->brkbase as the start
      point of the brk (data) segment, as it is traditional to place
@@ -569,10 +566,8 @@ Int VG_(load_ELF)(Int fd, const HChar* name, /*MOD*/ExeInfo* info)
       return VKI_ENOEXEC;
 
    /* The kernel maps position-independent executables at TASK_SIZE*2/3;
-      duplicate this behavior as close as we can. */
+      for us it's good enough to just load it somewhere with enough free space. */
    if (e->e.e_type == ET_DYN && ebase == 0) {
-      ebase = VG_PGROUNDDN(info->exe_base 
-                           + (info->exe_end - info->exe_base) * 2 / 3);
       /* We really don't want to load PIEs at zero or too close.  It
          works, but it's unrobust (NULL pointer reads and writes
          become legit, which is really bad) and causes problems for
@@ -585,13 +580,19 @@ Int VG_(load_ELF)(Int fd, const HChar* name, /*MOD*/ExeInfo* info)
       /* Later .. on mips64 we can't use 0x108000, because mapelf will
          fail. */
 #     if defined(VGP_mips64_linux)
+      ebase = VG_PGROUNDDN(info->exe_base
+                           + (info->exe_end - info->exe_base) * 2 / 3);
       if (ebase < 0x100000)
          ebase = 0x100000;
 #     else
-      vg_assert(VKI_PAGE_SIZE >= 4096); /* stay sane */
-      ESZ(Addr) hacky_load_address = 0x100000 + 8 * VKI_PAGE_SIZE;
-      if (ebase < hacky_load_address)
-         ebase = hacky_load_address;
+      Bool ok = False;
+      ebase = VG_(am_get_advisory_client_simple)( 0, e->p->p_filesz, &ok );
+
+      if (!ok) {
+         VG_(printf)( "Cannot find segment large enough to contain %llx bytes\n", (ULong)e->p->p_filesz );
+         return VKI_ENOMEM;
+      }
+
 #     endif
 
 #     if defined(VGO_solaris)
@@ -657,6 +658,7 @@ Int VG_(load_ELF)(Int fd, const HChar* name, /*MOD*/ExeInfo* info)
          if (sr_isError(sres))
 #endif
          sres = VG_(open)(buf, VKI_O_RDONLY, 0);
+         //sres = VG_(open)("/usr/home/paulf/build/src/obj/usr/home/paulf/build/src/amd64.amd64/libexec/rtld-elf/ld-elf.so.1.full", VKI_O_RDONLY, 0);
          if (sr_isError(sres)) {
             VG_(printf)("valgrind: m_ume.c: can't open interpreter\n");
             VG_(exit)(1);
@@ -876,9 +878,14 @@ Int VG_(load_ELF)(Int fd, const HChar* name, /*MOD*/ExeInfo* info)
    info->init_ip  = (Addr)entry;
    info->init_toc = 0; /* meaningless on this platform */
 #endif
-   VG_(free)(e->fn);
    VG_(free)(e->p);
    VG_(free)(e);
+
+   /* Get hold of a file descriptor which refers to the client
+      executable.  This is needed for attaching to GDB. */
+   SysRes res = VG_(dup)(fd);
+   if (!sr_isError(res))
+      VG_(cl_exec_fd) = sr_Res(res);
 
    return 0;
 }

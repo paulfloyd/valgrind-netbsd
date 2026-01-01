@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -42,8 +42,11 @@ extern Int VG_(safe_fd) ( Int oldfd );
 extern Int VG_(fcntl)   ( Int fd, Int cmd, Addr arg );
 
 /* Convert an fd into a filename */
-#if HAVE_DECL_F_GETPATH || defined(HAVE_SYMLINKS_IN_PROC_SELF_FD) \
-    || defined(HAVE_SYMLINKS_IN_PROC_SELF_PATH)
+//#if HAVE_DECL_F_GETPATH || defined(HAVE_SYMLINKS_IN_PROC_SELF_FD) \
+//    || defined(HAVE_SYMLINKS_IN_PROC_SELF_PATH)
+// FIXME PJF the above is wrong
+// FreeBSD has neither of the two HAVE_s but it does support resolving filenames from fds
+#if !defined(VGO_netbsd)
 #define OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD
 #endif
 extern Bool VG_(resolve_filename) ( Int fd, const HChar** buf );
@@ -113,6 +116,9 @@ extern Int VG_(mkstemp) ( const HChar* part_of_name, /*OUT*/HChar* fullname );
    VG_(get_startup_wd) (in pub_tool_libcfile.h).  Note that might
    return if the working directory couldn't be found.  */
 extern void VG_(record_startup_wd) ( void );
+
+/* Resolves a path to a canonical absolute path */
+extern Bool VG_(realpath)(const HChar *path, HChar *resolved);
 
 #endif   // __PUB_CORE_LIBCFILE_H
 

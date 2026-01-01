@@ -2,14 +2,14 @@ include $(top_srcdir)/Makefile.tool-tests.am
 
 dist_noinst_SCRIPTS = filter_stderr
 
-INSN_TESTS = cdsg cu21 cu42 ltgjhe vstrc vfae vistr vstrs
+INSN_TESTS = cdsg cli cu21 cu42 ltgjhe tmxx vstrc vfae vistr vstrs vme
 
 check_PROGRAMS = $(INSN_TESTS) 
 
 EXTRA_DIST = \
 	$(addsuffix .stderr.exp,$(INSN_TESTS)) \
-	$(addsuffix .stdout.exp,$(INSN_TESTS)) \
-	$(addsuffix .vgtest,$(INSN_TESTS))
+	$(addsuffix .vgtest,$(INSN_TESTS)) \
+	tmxx.stdout.exp
 
 AM_CFLAGS    += @FLAG_M64@
 AM_CXXFLAGS  += @FLAG_M64@

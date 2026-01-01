@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -190,14 +190,12 @@ typedef
 
 static HReg lookupIRTemp ( ISelEnv* env, IRTemp tmp )
 {
-   vassert(tmp >= 0);
    vassert(tmp < env->n_vregmap);
    return env->vregmap[tmp];
 }
 
 static void lookupIRTemp64 ( HReg* vrHI, HReg* vrLO, ISelEnv* env, IRTemp tmp )
 {
-   vassert(tmp >= 0);
    vassert(tmp < env->n_vregmap);
    vassert(! hregIsInvalid(env->vregmapHI[tmp]));
    *vrLO = env->vregmap[tmp];
@@ -1308,14 +1306,19 @@ static HReg iselIntExpr_R_wrk ( ISelEnv* env, const IRExpr* e )
             addInstr(env, X86Instr_Sh32(Xsh_SAR, 31, dst));
             return dst;
          }
-         case Iop_Ctz32: {
+         case Iop_CtzNat32: {
             /* Count trailing zeroes, implemented by x86 'bsfl' */
             HReg dst = newVRegI(env);
             HReg src = iselIntExpr_R(env, e->Iex.Unop.arg);
             addInstr(env, X86Instr_Bsfr32(True,src,dst));
+            /* Patch the result in case there was a 0 operand. */
+            IRExpr *cond = unop(Iop_CmpNEZ32, e->Iex.Unop.arg);
+            X86CondCode cc = iselCondCode(env, cond);
+            X86RM *ifz = iselIntExpr_RM(env, IRExpr_Const(IRConst_U32(32)));
+            addInstr(env, X86Instr_CMov32(cc ^ 1, ifz, dst));
             return dst;
          }
-         case Iop_Clz32: {
+         case Iop_ClzNat32: {
             /* Count leading zeroes.  Do 'bsrl' to establish the index
                of the highest set bit, and subtract that value from
                31. */
@@ -1327,6 +1330,11 @@ static HReg iselIntExpr_R_wrk ( ISelEnv* env, const IRExpr* e )
                                           X86RMI_Imm(31), dst));
             addInstr(env, X86Instr_Alu32R(Xalu_SUB,
                                           X86RMI_Reg(tmp), dst));
+            /* Patch the result in case there was a 0 operand. */
+            IRExpr *cond = unop(Iop_CmpNEZ32, e->Iex.Unop.arg);
+            X86CondCode cc = iselCondCode(env, cond);
+            X86RM *ifz = iselIntExpr_RM(env, IRExpr_Const(IRConst_U32(32)));
+            addInstr(env, X86Instr_CMov32(cc ^ 1, ifz, dst));
             return dst;
          }
 
@@ -3771,6 +3779,62 @@ static HReg iselVecExpr_wrk ( ISelEnv* env, const IRExpr* e )
          return dst;
       }
 
+      case Iop_ShlN8x16: {
+         /* This instruction doesn't exist so we need to fake it using
+            Xsse_SHL16 and Xsse_SHR16.
+
+            We'd like to shift every byte in the 16-byte register to the left by
+            some amount.
+
+            Instead, we will make a copy and shift all the 16-bit words to the
+            *right* by 8 and then to the left by 8 plus the shift amount.  That
+            will get us the correct answer for the upper 8 bits of each 16-bit
+            word and zero elsewhere.
+
+            Then we will shift all the 16-bit words in the original to the left
+            by 8 plus the shift amount and then to the right by 8.  This will
+            get the correct answer for the lower 8 bits of each 16-bit word and
+            zero elsewhere.
+
+            Finally, we will OR those two results together.
+
+            Because we don't have a shift by constant in x86, we store the
+            constant 8 into a register and shift by that as needed.
+         */
+         HReg      greg  = iselVecExpr(env, e->Iex.Binop.arg1);
+         X86RMI*   rmi   = iselIntExpr_RMI(env, e->Iex.Binop.arg2);
+         X86AMode* esp0  = X86AMode_IR(0, hregX86_ESP());
+         HReg      ereg  = newVRegV(env);
+         HReg      eight = newVRegV(env); // To store the constant value 8.
+         HReg      dst   = newVRegV(env);
+         HReg      hi    = newVRegV(env);
+         REQUIRE_SSE2;
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(rmi));
+         addInstr(env, X86Instr_SseLdSt(True/*load*/, ereg, esp0));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(0)));
+         addInstr(env, X86Instr_Push(X86RMI_Imm(8)));
+         addInstr(env, X86Instr_SseLdSt(True/*load*/, eight, esp0));
+
+         op = Xsse_SHL16;
+         X86SseOp reverse_op = Xsse_SHR16;
+         addInstr(env, mk_vMOVsd_RR(greg, hi));
+         addInstr(env, X86Instr_SseReRg(reverse_op, eight, hi));
+         addInstr(env, X86Instr_SseReRg(op, eight, hi));
+         addInstr(env, X86Instr_SseReRg(op, ereg, hi));
+         addInstr(env, mk_vMOVsd_RR(greg, dst));
+         addInstr(env, X86Instr_SseReRg(op, eight, dst));
+         addInstr(env, X86Instr_SseReRg(op, ereg, dst));
+         addInstr(env, X86Instr_SseReRg(reverse_op, eight, dst));
+         addInstr(env, X86Instr_SseReRg(Xsse_OR, hi, dst));
+
+         add_to_esp(env, 32);
+         return dst;
+      }
       case Iop_ShlN16x8: op = Xsse_SHL16; goto do_SseShift;
       case Iop_ShlN32x4: op = Xsse_SHL32; goto do_SseShift;
       case Iop_ShlN64x2: op = Xsse_SHL64; goto do_SseShift;
@@ -3802,6 +3866,33 @@ static HReg iselVecExpr_wrk ( ISelEnv* env, const IRExpr* e )
          goto do_SseAssistedBinary;
       case Iop_NarrowBin16to8x16:
          fn = (HWord)h_generic_calc_NarrowBin16to8x16;
+         goto do_SseAssistedBinary;
+      case Iop_Max8Sx16:
+         fn = (HWord)h_generic_calc_Max8Sx16;
+         goto do_SseAssistedBinary;
+      case Iop_Min8Sx16:
+         fn = (HWord)h_generic_calc_Min8Sx16;
+         goto do_SseAssistedBinary;
+      case Iop_Max16Ux8:
+         fn = (HWord)h_generic_calc_Max16Ux8;
+         goto do_SseAssistedBinary;
+      case Iop_Min16Ux8:
+         fn = (HWord)h_generic_calc_Min16Ux8;
+         goto do_SseAssistedBinary;
+      case Iop_Max32Sx4:
+         fn = (HWord)h_generic_calc_Max32Sx4;
+         goto do_SseAssistedBinary;
+      case Iop_Min32Sx4:
+         fn = (HWord)h_generic_calc_Min32Sx4;
+         goto do_SseAssistedBinary;
+      case Iop_Max32Ux4:
+         fn = (HWord)h_generic_calc_Max32Ux4;
+         goto do_SseAssistedBinary;
+      case Iop_Min32Ux4:
+         fn = (HWord)h_generic_calc_Min32Ux4;
+         goto do_SseAssistedBinary;
+      case Iop_Mul32x4:
+         fn = (HWord)h_generic_calc_Mul32x4;
          goto do_SseAssistedBinary;
       do_SseAssistedBinary: {
          /* As with the amd64 case (where this is copied from) we
@@ -4498,7 +4589,7 @@ HInstrArray* iselSB_X86 ( const IRSB* bb,
 {
    Int      i, j;
    HReg     hreg, hregHI;
-   ISelEnv* env;
+   ISelEnv  *env, envmem;
    UInt     hwcaps_host = archinfo_host->hwcaps;
    X86AMode *amCounter, *amFailAddr;
 
@@ -4515,7 +4606,7 @@ HInstrArray* iselSB_X86 ( const IRSB* bb,
    vassert(archinfo_host->endness == VexEndnessLE);
 
    /* Make up an initial environment to use. */
-   env = LibVEX_Alloc_inline(sizeof(ISelEnv));
+   env = &envmem;
    env->vreg_ctr = 0;
 
    /* Set up output code array. */

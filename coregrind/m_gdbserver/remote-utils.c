@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -255,11 +255,14 @@ int ensure_write_remote_desc(void)
    return (write_remote_desc != INVALID_DESCRIPTOR);
 }
 
+#if defined(VGO_darwin)
+#define VKI_S_IFIFO 0010000
+#endif
 static
-void safe_mkfifo (char *nod)
+void safe_mknod (char *nod)
 {
    SysRes m;
-   m = VG_(mkfifo)(nod, 0600);
+   m = VG_(mknod) (nod, VKI_S_IFIFO|0600, 0);
    if (sr_isError (m)) {
       if (sr_Err (m) == VKI_EEXIST) {
          if (VG_(clo_verbosity) > 1) {
@@ -369,8 +372,9 @@ void remote_open (const HChar *name)
                 pid);
    }
    if (VG_(clo_verbosity) > 1 
-       || VG_(clo_vgdb_error) < 999999999
-       || VG_(clo_vgdb_stop_at) != 0) {
+       || ((VG_(clo_vgdb_error) < 999999999
+            || VG_(clo_vgdb_stop_at) != 0)
+           && !(VG_(clo_launched_with_multi)))) {
       VG_(umsg)("\n");
       VG_(umsg)(
          "TO DEBUG THIS PROCESS USING GDB: start GDB like this\n"
@@ -425,8 +429,8 @@ void remote_open (const HChar *name)
       shared = (VgdbShared*) addr_shared;
       VG_(close) (shared_mem_fd);
 
-      safe_mkfifo(to_gdb);
-      safe_mkfifo(from_gdb);
+      safe_mknod(to_gdb);
+      safe_mknod(from_gdb);
       /* from_gdb is the last resource created: vgdb searches such FIFOs
          to detect the presence of a valgrind process.
          So, we better create this resource when all the rest needed by
@@ -656,36 +660,9 @@ void decode_address (CORE_ADDR *addrp, const char *start, int len)
    *addrp = addr;
 }
 
-/* Convert number NIB to a hex digit.  */
-
-static
-int tohex (int nib)
-{
-   if (nib < 10)
-      return '0' + nib;
-   else
-      return 'a' + nib - 10;
-}
-
-int hexify (char *hex, const char *bin, int count)
-{
-   int i;
-
-   /* May use a length, or a nul-terminated string as input. */
-   if (count == 0)
-      count = strlen (bin);
-
-  for (i = 0; i < count; i++) {
-     *hex++ = tohex ((*bin >> 4) & 0xf);
-     *hex++ = tohex (*bin++ & 0xf);
-  }
-  *hex = 0;
-  return i;
-}
-
 /* builds an image of bin according to byte order of the architecture 
    Useful for register and int image */
-char* heximage (char *buf, char *bin, int count)
+char* heximage (char *buf, const char *bin, int count)
 {
 #if (VKI_LITTLE_ENDIAN)
    char rev[count]; 
@@ -1160,7 +1137,7 @@ void prepare_resume_reply (char *buf, char status, unsigned char sig)
          CORE_ADDR addr;
          int i;
 
-         strncpy (buf, "watch:", 6);
+         memcpy (buf, "watch:", 6);
          buf += 6;
 
          addr = valgrind_stopped_data_address ();

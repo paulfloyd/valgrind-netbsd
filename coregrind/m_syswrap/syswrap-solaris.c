@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -98,11 +98,12 @@ static VgSchedReturnCode thread_wrapper(Word /*ThreadId*/ tidW)
 {
    VgSchedReturnCode ret;
    ThreadId tid = (ThreadId)tidW;
+   Int lwpid = VG_(gettid)();
    ThreadState *tst = VG_(get_ThreadState)(tid);
 
    VG_(debugLog)(1, "syswrap-solaris",
-                    "thread_wrapper(tid=%u): entry\n",
-                    tid);
+                    "thread_wrapper(tid=%u,lwpid=%d): entry\n",
+                    tid, lwpid);
 
    vg_assert(tst->status == VgTs_Init);
 
@@ -124,7 +125,7 @@ static VgSchedReturnCode thread_wrapper(Word /*ThreadId*/ tidW)
          here would be way too early - new thread has no stack, yet. */
    }
 
-   tst->os_state.lwpid = VG_(gettid)();
+   tst->os_state.lwpid = lwpid;
    tst->os_state.threadgroup = VG_(getpid)();
 
    /* Thread created with all signals blocked; scheduler will set the
@@ -138,8 +139,8 @@ static VgSchedReturnCode thread_wrapper(Word /*ThreadId*/ tidW)
    vg_assert(VG_(is_running_thread)(tid));
 
    VG_(debugLog)(1, "syswrap-solaris",
-                    "thread_wrapper(tid=%u): exit, schedreturncode %s\n",
-                    tid, VG_(name_of_VgSchedReturnCode)(ret));
+                    "thread_wrapper(tid=%u,lwpid=%d): exit, schedreturncode %s\n",
+                    tid, lwpid, VG_(name_of_VgSchedReturnCode)(ret));
 
    /* Return to caller, still holding the lock. */
    return ret;
@@ -510,6 +511,9 @@ ULong ML_(fletcher64)(UInt *buf, SizeT blocks)
    return (sum2 << 32) | sum1;
 }
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+
 /* Save a complete context (VCPU state, sigmask) of a given client thread
    into the vki_ucontext_t structure.  This structure is supposed to be
    allocated in the client memory, a caller must make sure that the memory can
@@ -626,7 +630,7 @@ void VG_(restore_context)(ThreadId tid, vki_ucontext_t *uc, CorePart part,
             VG_(dmsg)("restore_context, sigaltstack: tid %u, "
                       "ss %p{%p,sz=%lu,flags=%#x}\n",
                       tid, &uc->uc_stack, uc->uc_stack.ss_sp,
-                      (SizeT)uc->uc_stack.ss_size, uc->uc_stack.ss_flags);
+                      (SizeT)uc->uc_stack.ss_size, (UInt)uc->uc_stack.ss_flags);
 
          tst->altstack.ss_sp = uc->uc_stack.ss_sp;
          tst->altstack.ss_size = uc->uc_stack.ss_size;
@@ -638,10 +642,11 @@ void VG_(restore_context)(ThreadId tid, vki_ucontext_t *uc, CorePart part,
       if (tst->os_state.ustack
           && VG_(am_is_valid_for_client)((Addr)tst->os_state.ustack,
                                          sizeof(*tst->os_state.ustack),
-                                         VKI_PROT_WRITE))
+                                         VKI_PROT_WRITE)) {
          *tst->os_state.ustack = uc->uc_stack;
          VG_TRACK(post_mem_write, part, tid, (Addr)&tst->os_state.ustack,
                   sizeof(tst->os_state.ustack));
+      }
    }
 
    /* Restore the architecture-specific part of the context. */
@@ -663,6 +668,8 @@ void VG_(restore_context)(ThreadId tid, vki_ucontext_t *uc, CorePart part,
                   (new_esp - old_esp) + VG_STACK_REDZONE_SZB);
    }
 }
+
+#pragma GCC pop_options
 
 /* Set a client stack associated with a given thread id according to values
    passed in the vki_stack_t structure. */
@@ -952,6 +959,8 @@ DECL_TEMPLATE(solaris, sys_sysfs);
 DECL_TEMPLATE(solaris, sys_getmsg);
 DECL_TEMPLATE(solaris, sys_putmsg);
 DECL_TEMPLATE(solaris, sys_lstat);
+DECL_TEMPLATE(solaris, sys_sigprocmask);
+DECL_TEMPLATE(solaris, sys_sigsuspend);
 DECL_TEMPLATE(solaris, sys_sigaction);
 DECL_TEMPLATE(solaris, sys_sigpending);
 DECL_TEMPLATE(solaris, sys_getsetcontext);
@@ -1030,6 +1039,7 @@ DECL_TEMPLATE(solaris, sys_acl);
 DECL_TEMPLATE(solaris, sys_auditsys);
 DECL_TEMPLATE(solaris, sys_p_online);
 DECL_TEMPLATE(solaris, sys_sigqueue);
+DECL_TEMPLATE(solaris, sys_clock_gettime);
 DECL_TEMPLATE(solaris, sys_clock_settime);
 DECL_TEMPLATE(solaris, sys_clock_getres);
 DECL_TEMPLATE(solaris, sys_timer_create);
@@ -1704,7 +1714,7 @@ static Bool handle_psinfo_open(SyscallStatus *status,
    return True;
 }
 
-#if defined(HAVE_PROC_SELF_CMDLINE)
+#if defined(SOLARIS_PROC_CMDLINE)
 /* Handles the case where the open is of /proc/self/cmdline or
    /proc/<pid>/cmdline. Just give it a copy of VG_(cl_cmdline_fd) for the
    fake file we cooked up at startup (in m_main).  Also, seek the
@@ -1730,7 +1740,7 @@ static Bool handle_cmdline_open(SyscallStatus *status, const HChar *filename)
 
    return True;
 }
-#endif /* HAVE_PROC_SELF_CMDLINE */
+#endif /* SOLARIS_PROC_CMDLINE */
 
 
 #if defined(SOLARIS_OLD_SYSCALLS)
@@ -1741,7 +1751,7 @@ PRE(sys_open)
 
    if (ARG2 & VKI_O_CREAT) {
       /* 3-arg version */
-      PRINT("sys_open ( %#lx(%s), %ld, %ld )", ARG1, (HChar *) ARG1,
+      PRINT("sys_open ( %#lx(%s), %ld, %lu )", ARG1, (HChar *) ARG1,
             SARG2, ARG3);
       PRE_REG_READ3(long, "open", const char *, filename,
                     int, flags, vki_mode_t, mode);
@@ -1765,6 +1775,8 @@ PRE(sys_open)
 
 POST(sys_open)
 {
+   POST_newFd_RES;
+
    if (!ML_(fd_allowed)(RES, "open", tid, True)) {
       VG_(close)(RES);
       SET_STATUS_Failure(VKI_EMFILE);
@@ -1777,16 +1789,7 @@ PRE(sys_close)
 {
    WRAPPER_PRE_NAME(generic, sys_close)(tid, layout, arrghs, status,
                                         flags);
-}
-
-POST(sys_close)
-{
-   WRAPPER_POST_NAME(generic, sys_close)(tid, arrghs, status);
    door_record_revoke(tid, ARG1);
-   /* Possibly an explicitly open'ed client door fd was just closed.
-      Generic sys_close wrapper calls this only if VG_(clo_track_fds) = True. */
-   if (!VG_(clo_track_fds))
-      ML_(record_fd_close)(ARG1);
 }
 
 PRE(sys_linkat)
@@ -1809,18 +1812,8 @@ PRE(sys_linkat)
    PRE_MEM_RASCIIZ("linkat(path2)", ARG4);
 
    /* Be strict but ignore fd1/fd2 for absolute path1/path2. */
-   if (fd1 != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd1, "linkat", tid, False)) {
-      SET_STATUS_Failure(VKI_EBADF);
-   }
-   if (fd2 != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG4, 1)
-       && ((HChar *) ARG4)[0] != '/'
-       && !ML_(fd_allowed)(fd2, "linkat", tid, False)) {
-      SET_STATUS_Failure(VKI_EBADF);
-   }
+   ML_(fd_at_check_allowed)(fd1, (const HChar*)ARG2, "linkat(efd)", tid, status);
+   ML_(fd_at_check_allowed)(fd2, (const HChar*)ARG4, "linkat(nfd)", tid, status);
 
    *flags |= SfMayBlock;
 }
@@ -1841,11 +1834,7 @@ PRE(sys_symlinkat)
    PRE_MEM_RASCIIZ("symlinkat(path2)", ARG3);
 
    /* Be strict but ignore fd for absolute path2. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG3, 1)
-       && ((HChar *) ARG3)[0] != '/'
-       && !ML_(fd_allowed)(fd, "symlinkat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG3, "symlinkat", tid, status);
 
    *flags |= SfMayBlock;
 }
@@ -2028,7 +2017,7 @@ PRE(sys_brk)
 
       if (!VG_(setup_client_dataseg)()) {
          possibly_complain_brk("Cannot map memory to initialize brk segment in "
-                               "thread #%d at %#lx\n", tid, VG_(brk_base));
+                               "thread #%u at %#lx\n", tid, VG_(brk_base));
          SET_STATUS_Failure(VKI_ENOMEM);
          return;
       }
@@ -2170,7 +2159,7 @@ PRE(sys_brk)
          Bool ok = VG_(am_create_reservation)(resvn_start, resvn_size, SmLower,
                                               anon_size);
          if (!ok) {
-            possibly_complain_brk("brk segment overflow in thread #%d: can not "
+            possibly_complain_brk("brk segment overflow in thread #%u: can not "
                                   "grow to %#lx\n", tid, new_brk);
             SET_STATUS_Failure(VKI_ENOMEM);
             return;
@@ -2185,7 +2174,7 @@ PRE(sys_brk)
          sres = VG_(am_mmap_anon_fixed_client)(anon_start, anon_size, prot);
          if (sr_isError(sres)) {
             possibly_complain_brk("Cannot map memory to grow brk segment in "
-                                  "thread #%d to %#lx\n", tid, new_brk);
+                                  "thread #%u to %#lx\n", tid, new_brk);
             SET_STATUS_Failure(VKI_ENOMEM);
             return;
          }
@@ -2243,7 +2232,7 @@ PRE(sys_mount)
    *flags |= SfMayBlock;
    if (ARG3 & VKI_MS_OPTIONSTR) {
       /* 8-argument mount */
-      PRINT("sys_mount ( %#lx(%s), %#lx(%s), %ld, %#lx(%s), %#lx, %ld, "
+      PRINT("sys_mount ( %#lx(%s), %#lx(%s), %ld, %#lx(%s), %#lx, %lu, "
             "%#lx(%s), %ld )", ARG1, (HChar *) ARG1, ARG2, (HChar *) ARG2, SARG3,
             ARG4, (HChar *) ARG4, ARG5, ARG6, ARG7, (HChar *) ARG7, SARG8);
       PRE_REG_READ8(long, "mount", const char *, spec, const char *, dir,
@@ -2320,13 +2309,7 @@ PRE(sys_readlinkat)
    PRE_MEM_WRITE("readlinkat(buf)", ARG3, ARG4);
 
    /* Be strict but ignore dfd for absolute path. */
-   if (dfd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(dfd, "readlinkat", tid, False)) {
-      SET_STATUS_Failure(VKI_EBADF);
-      return;
-   }
+   ML_(fd_at_check_allowed)(dfd, (const HChar*)ARG2, "readlinkat", tid, status);
 
    /* Handle the case where readlinkat is looking at /proc/self/path/a.out or
       /proc/<pid>/path/a.out. */
@@ -2348,7 +2331,7 @@ POST(sys_readlinkat)
 PRE(sys_stime)
 {
    /* Kernel: int stime(time_t time); */
-   PRINT("sys_stime ( %ld )", ARG1);
+   PRINT("sys_stime ( %lu )", ARG1);
    PRE_REG_READ1(long, "stime", vki_time_t, time);
 }
 
@@ -2361,8 +2344,6 @@ PRE(sys_fstat)
    PRINT("sys_fstat ( %ld, %#lx )", SARG1, ARG2);
    PRE_REG_READ2(long, "fstat", int, fildes, struct stat *, buf);
    PRE_MEM_WRITE("fstat(buf)", ARG2, sizeof(struct vki_stat));
-
-   /* Be strict. */
    if (!ML_(fd_allowed)(ARG1, "fstat", tid, False))
       SET_STATUS_Failure(VKI_EBADF);
 }
@@ -2389,11 +2370,7 @@ PRE(sys_frealpathat)
    PRE_MEM_WRITE("frealpathat(buf)", ARG3, ARG4);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "frealpathat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "frealpathat", tid, status);
 }
 
 POST(sys_frealpathat)
@@ -2493,6 +2470,7 @@ PRE(sys_pipe)
 POST(sys_pipe)
 {
    Int p0, p1;
+   // @todo PJF this needs something like POST_newFd_RES for the two fds?
 
 #if defined(SOLARIS_NEW_PIPE_SYSCALL)
    int *fds = (int*)ARG1;
@@ -2531,11 +2509,7 @@ PRE(sys_faccessat)
    PRE_MEM_RASCIIZ("faccessat(path)", ARG2);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "faccessat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "faccessat", tid, status);
 }
 
 PRE(sys_mknodat)
@@ -2553,17 +2527,14 @@ PRE(sys_mknodat)
    PRE_MEM_RASCIIZ("mknodat(fname)", ARG2);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "mknodat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "mknodat", tid, status);
 
    *flags |= SfMayBlock;
 }
 
 POST(sys_mknodat)
 {
+   POST_newFd_RES;
    if (!ML_(fd_allowed)(RES, "mknodat", tid, True)) {
       VG_(close)(RES);
       SET_STATUS_Failure(VKI_EMFILE);
@@ -2727,7 +2698,7 @@ PRE(sys_shmsys)
 
    case VKI_SHMGET:
       /* Libc: int shmget(key_t key, size_t size, int shmflg); */
-      PRINT("sys_shmsys ( %ld, %ld, %lu, %ld )",
+      PRINT("sys_shmsys ( %ld, %ld, %lu, %lu )",
             SARG1, SARG2, ARG3, ARG4);
       PRE_REG_READ4(long, SC2("shmsys", "shmget"), int, opcode,
                     vki_key_t, key, vki_size_t, size, int, shmflg);
@@ -2747,7 +2718,7 @@ PRE(sys_shmsys)
 #if defined(SOLARIS_SHM_NEW)
    case VKI_SHMADV:
       /* Libc: int shmadv(int shmid, uint_t cmd, uint_t *advice); */
-      PRINT("sys_shmsys ( %ld, %ld, %lu, %ld )",
+      PRINT("sys_shmsys ( %ld, %ld, %lu, %lu )",
             SARG1, SARG2, ARG3, ARG4);
       PRE_REG_READ4(long, SC2("shmsys", "shmadv"), int, opcode,
                     int, shmid, vki_uint_t, cmd, vki_uint_t *, advice);
@@ -3585,7 +3556,7 @@ PRE(sys_fchownat)
       This is different from Linux, for example, where glibc sign-extends it. */
    Int fd = (Int) ARG1;
 
-   PRINT("sys_fchownat ( %d, %#lx(%s), %ld, %ld, %ld )", fd,
+   PRINT("sys_fchownat ( %d, %#lx(%s), %ld, %ld, %lu )", fd,
          ARG2, (HChar *) ARG2, SARG3, SARG4, ARG5);
    PRE_REG_READ5(long, "fchownat", int, fd, const char *, path,
                  vki_uid_t, owner, vki_gid_t, group, int, flag);
@@ -3594,11 +3565,7 @@ PRE(sys_fchownat)
       PRE_MEM_RASCIIZ("fchownat(path)", ARG2);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "fchownat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "fchownat", tid, status);
 }
 
 PRE(sys_fdsync)
@@ -3934,7 +3901,7 @@ PRE(sys_execve)
 #if defined(SOLARIS_EXECVE_SYSCALL_TAKES_FLAGS)
    if (ARG1_is_fd)
       VG_(message)(Vg_UserMsg, "execve(%ld, %#lx, %#lx, %lu) failed, "
-                   "errno %ld\n", SARG1, ARG2, ARG3, ARG4, ERR);
+                   "errno %lu\n", SARG1, ARG2, ARG3, ARG4, ERR);
    else
       VG_(message)(Vg_UserMsg, "execve(%#lx(%s), %#lx, %#lx, %ld) failed, errno"
                    " %lu\n", ARG1, (HChar *) ARG1, ARG2, ARG3, SARG4, ERR);
@@ -3992,11 +3959,13 @@ PRE(sys_fcntl)
       PRE_REG_READ3(long, "fcntl", int, fildes, int, cmd, int, arg);
       /* Check if a client program isn't going to poison any of V's output
          fds. */
+      /*
       if (ARG2 == VKI_F_DUP2FD &&
           !ML_(fd_allowed)(ARG3, "fcntl(F_DUP2FD)", tid, False)) {
          SET_STATUS_Failure(VKI_EBADF);
          return;
       }
+      */
       break;
 
    /* These ones use ARG3 as "native lock" (input only). */
@@ -4073,8 +4042,11 @@ PRE(sys_fcntl)
 
 POST(sys_fcntl)
 {
+   // @todo PJF we're missing
+   // F_DUP2FD_CLOEXEC F_DUP2FD_CLOFORK F_DUPFD_CLOFORK F_DUP3FD
    switch (ARG2 /*cmd*/) {
    case VKI_F_DUPFD:
+      POST_newFd_RES;
       if (!ML_(fd_allowed)(RES, "fcntl(F_DUPFD)", tid, True)) {
          VG_(close)(RES);
          SET_STATUS_Failure(VKI_EMFILE);
@@ -4083,6 +4055,7 @@ POST(sys_fcntl)
       break;
 
    case VKI_F_DUPFD_CLOEXEC:
+      POST_newFd_RES;
       if (!ML_(fd_allowed)(RES, "fcntl(F_DUPFD_CLOEXEC)", tid, True)) {
          VG_(close)(RES);
          SET_STATUS_Failure(VKI_EMFILE);
@@ -4091,6 +4064,7 @@ POST(sys_fcntl)
       break;
 
    case VKI_F_DUP2FD:
+      POST_newFd_RES;
       if (!ML_(fd_allowed)(RES, "fcntl(F_DUP2FD)", tid, True)) {
          VG_(close)(RES);
          SET_STATUS_Failure(VKI_EMFILE);
@@ -4135,18 +4109,8 @@ PRE(sys_renameat)
    PRE_MEM_RASCIIZ("renameat(new)", ARG4);
 
    /* Be strict but ignore fromfd/tofd for absolute old/new. */
-   if (fromfd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fromfd, "renameat", tid, False)) {
-      SET_STATUS_Failure(VKI_EBADF);
-   }
-   if (tofd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG4, 1)
-       && ((HChar *) ARG4)[0] != '/'
-       && !ML_(fd_allowed)(tofd, "renameat", tid, False)) {
-      SET_STATUS_Failure(VKI_EBADF);
-   }
+   ML_(fd_at_check_allowed)(fromfd, (const HChar*)ARG2, "renameat(fromfd)", tid, status);
+   ML_(fd_at_check_allowed)(tofd, (const HChar*)ARG4, "renameat(tofd)", tid, status);
 }
 
 PRE(sys_unlinkat)
@@ -4165,11 +4129,7 @@ PRE(sys_unlinkat)
    PRE_MEM_RASCIIZ("unlinkat(pathname)", ARG2);
 
    /* Be strict but ignore dfd for absolute pathname. */
-   if (dfd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(dfd, "unlinkat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(dfd, (const HChar*)ARG2, "unlinkat", tid, status);
 }
 
 PRE(sys_fstatat)
@@ -4193,11 +4153,7 @@ PRE(sys_fstatat)
    PRE_MEM_WRITE("fstatat(buf)", ARG3, sizeof(struct vki_stat));
 
    /* Be strict but ignore fildes for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "fstatat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "fstatat", tid, status);
 }
 
 POST(sys_fstatat)
@@ -4231,6 +4187,7 @@ PRE(sys_openat)
 
    PRE_MEM_RASCIIZ("openat(filename)", ARG2);
 
+   // @todo PJF use ML_(fd_at_check) and not return early here
    /* Be strict but ignore fildes for absolute pathname. */
    if (fd != VKI_AT_FDCWD
        && ML_(safe_to_deref)((void *) ARG2, 1)
@@ -4247,16 +4204,17 @@ PRE(sys_openat)
                           fd, ARG3, ARG4))
       return;
 
-#if defined(HAVE_PROC_SELF_CMDLINE)
+#if defined(SOLARIS_PROC_CMDLINE)
    if (handle_cmdline_open(status, (const HChar *) ARG2))
       return;
-#endif /* HAVE_PROC_SELF_CMDLINE */
+#endif /* SOLARIS_PROC_CMDLINE */
 
    *flags |= SfMayBlock;
 }
 
 POST(sys_openat)
 {
+   POST_newFd_RES;
    if (!ML_(fd_allowed)(RES, "openat", tid, True)) {
       VG_(close)(RES);
       SET_STATUS_Failure(VKI_EMFILE);
@@ -4677,7 +4635,7 @@ POST(sys_ucredsys)
 PRE(sys_sysfs)
 {
    /* Kernel: int sysfs(int opcode, long a1, long a2); */
-   PRINT("sys_sysfs ( %ld, %ld, %ld )", SARG1, SARG2, ARG3);
+   PRINT("sys_sysfs ( %ld, %ld, %ld )", SARG1, SARG2, SARG3);
 
    switch (ARG1 /*opcode*/) {
    case VKI_GETFSIND:
@@ -4815,6 +4773,61 @@ PRE(sys_lstat)
 POST(sys_lstat)
 {
    POST_MEM_WRITE(ARG2, sizeof(struct vki_stat));
+}
+
+PRE(sys_sigprocmask)
+{
+   /* int sigprocmask(int how, const sigset_t *set, sigset_t *oset); */
+   PRINT("sys_sigprocmask ( %ld, %#lx, %#lx )", SARG1, ARG2, ARG3);
+   PRE_REG_READ3(long, "sigprocmask",
+                 int, how, vki_sigset_t *, set, vki_sigset_t *, oset);
+   if (ARG2)
+      PRE_MEM_READ("sigprocmask(set)", ARG2, sizeof(vki_sigset_t));
+   if (ARG3)
+      PRE_MEM_WRITE("sigprocmask(oset)", ARG3, sizeof(vki_sigset_t));
+
+   /* Be safe. */
+   if (ARG2 && !ML_(safe_to_deref((void*)ARG2, sizeof(vki_sigset_t)))) {
+      SET_STATUS_Failure(VKI_EFAULT);
+   }
+   if (ARG3 && !ML_(safe_to_deref((void*)ARG3, sizeof(vki_sigset_t)))) {
+      SET_STATUS_Failure(VKI_EFAULT);
+   }
+
+   if (!FAILURE)
+      SET_STATUS_from_SysRes(
+         VG_(do_sys_sigprocmask)(tid, ARG1 /*how*/, (vki_sigset_t*)ARG2,
+                                 (vki_sigset_t*)ARG3)
+      );
+
+   if (SUCCESS)
+      *flags |= SfPollAfter;
+}
+
+POST(sys_sigprocmask)
+{
+   if (ARG3)
+      POST_MEM_WRITE(ARG3, sizeof(vki_sigset_t));
+}
+
+PRE(sys_sigsuspend)
+{
+   *flags |= SfMayBlock;
+
+   /* int sigsuspend(const sigset_t *set); */
+   PRINT("sys_sigsuspend ( %#lx )", ARG1);
+   PRE_REG_READ1(long, "sigsuspend", vki_sigset_t *, set);
+   PRE_MEM_READ("sigsuspend(set)", ARG1, sizeof(vki_sigset_t));
+
+   /* Be safe. */
+   if (ARG1 && ML_(safe_to_deref((void *) ARG1, sizeof(vki_sigset_t)))) {
+      VG_(sigdelset)((vki_sigset_t *) ARG1, VG_SIGVGKILL); 
+      /* We cannot mask VG_SIGVGKILL, as otherwise this thread would not
+         be killable by VG_(nuke_all_threads_except).
+         We thus silently ignore the user request to mask this signal.
+         Note that this is similar to what is done for e.g.
+         sigprocmask (see m_signals.c calculate_SKSS_from_SCSS).  */
+   }
 }
 
 PRE(sys_sigaction)
@@ -4993,11 +5006,7 @@ PRE(sys_fchmodat)
       PRE_MEM_RASCIIZ("fchmodat(path)", ARG2);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "fchmodat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "fchmodat", tid, status);
 }
 
 PRE(sys_mkdirat)
@@ -5015,11 +5024,7 @@ PRE(sys_mkdirat)
    PRE_MEM_RASCIIZ("mkdirat(path)", ARG2);
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "mkdirat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "mkdirat", tid, status);
 }
 
 static void do_statvfs_post(struct vki_statvfs *stats, ThreadId tid)
@@ -5157,7 +5162,7 @@ PRE(sys_sigsendsys)
    }
 
    if (VG_(clo_trace_signals))
-      VG_(message)(Vg_DebugMsg, "sigsendsys: sending signal to process %d\n",
+      VG_(message)(Vg_DebugMsg, "sigsendsys: sending signal to process %u\n",
                    pid);
 
    /* Handle SIGKILL specially. */
@@ -5211,11 +5216,7 @@ PRE(sys_utimesys)
             PRE_MEM_READ("utimesys(times)", ARG4, 2 * sizeof(vki_timespec_t));
 
          /* Be strict but ignore fd for absolute path. */
-         if (fd != VKI_AT_FDCWD
-             && ML_(safe_to_deref)((void *) ARG3, 1)
-             && ((HChar *) ARG3)[0] != '/'
-             && !ML_(fd_allowed)(fd, "utimesys", tid, False))
-            SET_STATUS_Failure(VKI_EBADF);
+         ML_(fd_at_check_allowed)(fd, (const HChar*)ARG3, "utimesys", tid, status);
          break;
       }
    default:
@@ -5247,11 +5248,7 @@ PRE(sys_utimensat)
       PRE_MEM_READ("utimensat(times)", ARG3, 2 * sizeof(vki_timespec_t));
 
    /* Be strict but ignore fd for absolute path. */
-   if (fd != VKI_AT_FDCWD
-       && ML_(safe_to_deref)((void *) ARG2, 1)
-       && ((HChar *) ARG2)[0] != '/'
-       && !ML_(fd_allowed)(fd, "utimensat", tid, False))
-      SET_STATUS_Failure(VKI_EBADF);
+   ML_(fd_at_check_allowed)(fd, (const HChar*)ARG2, "utimensat", tid, status);
 }
 #endif /* SOLARIS_UTIMENSAT_SYSCALL */
 
@@ -5299,7 +5296,7 @@ PRE(sys_sigresend)
    *flags |= SfPollAfter;
 
    if (VG_(clo_trace_signals))
-      VG_(message)(Vg_DebugMsg, "sigresend: resending signal %ld\n", ARG1);
+      VG_(message)(Vg_DebugMsg, "sigresend: resending signal %lu\n", ARG1);
 
    /* Handle SIGKILL specially. */
    if (ARG1 == VKI_SIGKILL && ML_(do_sigkill)(tid, -1)) {
@@ -6043,7 +6040,7 @@ static SysRes mmapobj_process_phdrs(ThreadId tid, Int fd,
                                    "mmap failed: addr=%#lx size=%#lx prot=%#x "
                                    "flags=%#x fd=%d file offset=%#llx\n",
                                    (Addr) mrp->mr_addr, file_size,
-                                   prot, flags, fd, file_offset);
+                                   prot, flags, fd, (unsigned long long)file_offset);
                goto mmap_error;
             }
 
@@ -6051,7 +6048,7 @@ static SysRes mmapobj_process_phdrs(ThreadId tid, Int fd,
                              "segment: vaddr=%#lx size=%#lx prot=%#x "
                              "flags=%#x fd=%d file offset=%#llx\n",
                              (Addr) mrp->mr_addr, file_size, mrp->mr_prot,
-                             flags, fd, file_offset);
+                             flags, fd, (unsigned long long)file_offset);
          }
 
          if (zeroed_size > 0) {
@@ -6118,7 +6115,7 @@ static SysRes mmapobj_process_phdrs(ThreadId tid, Int fd,
       VG_(brk_base) = VG_(brk_limit) = elfbrk;
 
       if (!VG_(setup_client_dataseg)()) {
-         VG_(umsg)("Cannot map memory to initialize brk segment in thread #%d "
+         VG_(umsg)("Cannot map memory to initialize brk segment in thread #%u "
                    "at %#lx\n", tid, VG_(brk_base));
          res = VG_(mk_SysRes_Error)(VKI_ENOMEM);
          goto mmap_error;
@@ -6197,7 +6194,7 @@ static SysRes mmapobj_interpret(ThreadId tid, Int fd,
    if (header[VKI_EI_CLASS] != VG_ELF_CLASS) {
       if (VG_(clo_trace_syscalls))
          VG_(debugLog)(3, "syswrap-solaris", "mmapobj_interpret: ELF class "
-                          "mismatch (%u vs %u)\n", header[VKI_EI_CLASS],
+                          "mismatch (%d vs %d)\n", header[VKI_EI_CLASS],
                           VG_ELF_CLASS);
       return VG_(mk_SysRes_Error)(VKI_ENOTSUP);
    }
@@ -6767,7 +6764,7 @@ PRE(sys_modctl)
    switch (ARG1 /*cmd*/) {
    case VKI_MODLOAD:
       /* int modctl_modload(int use_path, char *filename, int *rvp); */
-      PRINT("sys_modctl ( %ld, %ld, %#lx(%s), %#lx )",
+      PRINT("sys_modctl ( %ld, %lu, %#lx(%s), %#lx )",
             SARG1, ARG2, ARG3, (HChar *) ARG3, ARG4);
       PRE_REG_READ4(long, SC2("modctl", "modload"),
                     int, cmd, int, use_path, char *, filename, int *, rvp);
@@ -6848,7 +6845,7 @@ PRE(sys_modctl)
 
       default:
          VG_(unimplemented)("Syswrap of the modctl call with command "
-                            "MODNVL_DEVLINKSYNC and op %ld.", ARG2);
+                            "MODNVL_DEVLINKSYNC and op %lu.", ARG2);
          /*NOTREACHED*/
          break;
       }
@@ -6972,7 +6969,7 @@ PRE(sys_lwp_create)
    vki_ucontext_t uc;
    Bool tool_informed = False;
 
-   PRINT("sys_lwp_create ( %#lx, %ld, %#lx )", ARG1, ARG2, ARG3);
+   PRINT("sys_lwp_create ( %#lx, %lu, %#lx )", ARG1, ARG2, ARG3);
    PRE_REG_READ3(long, "lwp_create", ucontext_t *, ucp, int, flags,
                  id_t *, new_lwp);
 
@@ -7723,6 +7720,7 @@ POST(sys_port)
    Int opcode = ARG1 & VKI_PORT_CODE_MASK;
    switch (opcode) {
    case VKI_PORT_CREATE:
+      POST_newFd_RES;
       if (!ML_(fd_allowed)(RES, "port", tid, True)) {
          VG_(close)(RES);
          SET_STATUS_Failure(VKI_EMFILE);
@@ -7772,8 +7770,9 @@ PRE(sys_pollsys)
    for (i = 0; i < ARG2; i++) {
       vki_pollfd_t *u = &ufds[i];
       PRE_FIELD_READ("poll(ufds.fd)", u->fd);
-      /* XXX Check if it's valid? */
-      PRE_FIELD_READ("poll(ufds.events)", u->events);
+      if (ML_(safe_to_deref)(&ufds[i].fd, sizeof(ufds[i].fd)) && ufds[i].fd >= 0) {
+         PRE_FIELD_READ("poll(ufds.events)", u->events);
+      }
       PRE_FIELD_WRITE("poll(ufds.revents)", u->revents);
    }
 
@@ -8404,6 +8403,20 @@ PRE(sys_sigqueue)
    *flags |= SfPollAfter;
 }
 
+PRE(sys_clock_gettime)
+{
+   /* int clock_gettime(clockid_t clock_id, struct timespec *tp); */
+   PRINT("sys_clock_gettime ( %ld, %#lx )", SARG1, ARG2);
+   PRE_REG_READ2(long, "clock_gettime", vki_clockid_t, clock_id,
+                 struct timespec *, tp);
+   PRE_MEM_WRITE("clock_gettime(tp)", ARG2, sizeof(struct vki_timespec));
+}
+
+POST(sys_clock_gettime)
+{
+   POST_MEM_WRITE(ARG2, sizeof(struct vki_timespec));
+}
+
 PRE(sys_clock_settime)
 {
    /* int clock_settime(clockid_t clock_id, const struct timespec *tp); */
@@ -8469,6 +8482,7 @@ PRE(sys_timer_delete)
    /* int timer_delete(timer_t timerid); */
    PRINT("sys_timer_delete ( %ld )", SARG1);
    PRE_REG_READ1(long, "timer_delete", vki_timer_t, timerid);
+   *flags |= SfPollAfter;
 }
 
 PRE(sys_timer_settime)
@@ -8618,7 +8632,7 @@ static Int pre_check_and_close_fds(ThreadId tid, const HChar *name,
          if ((desc->d_attributes & DOOR_DESCRIPTOR) &&
              (desc->d_attributes & DOOR_RELEASE)) {
             Int fd = desc->d_data.d_desc.d_descriptor;
-            ML_(record_fd_close)(fd);
+            ML_(record_fd_close)(tid, fd);
          }
       }
    }
@@ -8843,7 +8857,7 @@ static void door_call_pre_mem_params_data(ThreadId tid, Int fd,
    if (!VG_(clo_track_fds) && !ML_(fd_recorded)(fd)) {
       ML_(record_fd_open_named)(tid, fd);
    }
-   pathname = VG_(find_fd_recorded_by_fd)(fd);
+   pathname = ML_(find_fd_recorded_by_fd)(fd);
 
    /* Debug-only printing. */
    if (0) {
@@ -8979,7 +8993,7 @@ static void door_call_post_mem_params_rbuf(ThreadId tid, Int fd,
                                            const vki_door_desc_t *desc_ptr,
                                            vki_uint_t desc_num)
 {
-   const HChar *pathname = VG_(find_fd_recorded_by_fd)(fd);
+   const HChar *pathname = ML_(find_fd_recorded_by_fd)(fd);
 
    /* Debug-only printing. */
    if (0) {
@@ -9483,12 +9497,18 @@ POST(sys_door)
 
    switch (ARG6 /*subcode*/) {
    case VKI_DOOR_CREATE:
-      door_record_server(tid, ARG1, RES);
+      POST_newFd_RES;
+      if (!ML_(fd_allowed)(RES, "door_create", tid, True)) {
+         VG_(close)(RES);
+         SET_STATUS_Failure( VKI_EMFILE );
+      } else {
+         door_record_server(tid, ARG1, RES);
+      }
       break;
    case VKI_DOOR_REVOKE:
       door_record_revoke(tid, ARG1);
       if (VG_(clo_track_fds))
-         ML_(record_fd_close)(ARG1);
+         ML_(record_fd_close)(tid, ARG1);
       break;
    case VKI_DOOR_INFO:
       POST_MEM_WRITE(ARG2, sizeof(vki_door_info_t));
@@ -9512,7 +9532,7 @@ POST(sys_door)
 
                VG_(debugLog)(1, "syswrap-solaris", "POST(sys_door), "
                                 "new segment: vaddr=%#lx, size=%#lx, "
-                                "prot=%#x, flags=%#x, fd=%ld, offset=%#llx\n",
+                                "prot=%#x, flags=%#x, fd=%lu, offset=%#llx\n",
                                 addr, size, prot, flags, (UWord)-1, (ULong)0);
 
                ML_(notify_core_and_tool_of_mmap)(addr, size, prot, flags,
@@ -9750,7 +9770,7 @@ PRE(sys_pset)
 #  endif /* SOLARIS_PSET_GET_NAME */
    case VKI_PSET_SETATTR:
       /* Libc: int pset_setattr(psetid_t pset, uint_t attr); */
-      PRINT("sys_pset ( %ld, %ld, %ld )", SARG1, SARG2, ARG3);
+      PRINT("sys_pset ( %ld, %ld, %lu )", SARG1, SARG2, ARG3);
       PRE_REG_READ3(long, SC2("pset", "setattr"), int, subcode,
                     vki_psetid_t, pset, vki_uint_t, attr);
       break;
@@ -10754,7 +10774,7 @@ static SyscallTableEntry syscall_table[] = {
 #if defined(SOLARIS_OLD_SYSCALLS)
    SOLXY(__NR_open,                 sys_open),                  /*   5 */
 #endif /* SOLARIS_OLD_SYSCALLS */
-   SOLXY(__NR_close,                sys_close),                 /*   6 */
+   SOLX_(__NR_close,                sys_close),                 /*   6 */
    SOLX_(__NR_linkat,               sys_linkat),                /*   7 */
 #if defined(SOLARIS_OLD_SYSCALLS)
    GENX_(__NR_link,                 sys_link),                  /*   9 */
@@ -10839,7 +10859,7 @@ static SyscallTableEntry syscall_table[] = {
 #if defined(SOLARIS_OLD_SYSCALLS)
    SOLXY(__NR_lstat,                sys_lstat),                 /*  88 */
    GENX_(__NR_symlink,              sys_symlink),               /*  89 */
-   GENX_(__NR_readlink,             sys_readlink),              /*  90 */
+   GENXY(__NR_readlink,             sys_readlink),              /*  90 */
 #endif /* SOLARIS_OLD_SYSCALLS */
    GENX_(__NR_setgroups,            sys_setgroups),             /*  91 */
    GENXY(__NR_getgroups,            sys_getgroups),             /*  92 */
@@ -10847,8 +10867,8 @@ static SyscallTableEntry syscall_table[] = {
    GENX_(__NR_fchmod,               sys_fchmod),                /*  93 */
    GENX_(__NR_fchown,               sys_fchown),                /*  94 */
 #endif /* SOLARIS_OLD_SYSCALLS */
-   GENXY(__NR_sigprocmask,          sys_sigprocmask),           /*  95 */
-   GENX_(__NR_sigsuspend,           sys_sigsuspend),            /*  96 */
+   SOLXY(__NR_sigprocmask,          sys_sigprocmask),           /*  95 */
+   SOLX_(__NR_sigsuspend,           sys_sigsuspend),            /*  96 */
    GENXY(__NR_sigaltstack,          sys_sigaltstack),           /*  97 */
    SOLXY(__NR_sigaction,            sys_sigaction),             /*  98 */
    SOLXY(__NR_sigpending,           sys_sigpending),            /*  99 */
@@ -10878,6 +10898,9 @@ static SyscallTableEntry syscall_table[] = {
 #if defined(SOLARIS_UUIDSYS_SYSCALL)
    SOLXY(__NR_uuidsys,              sys_uuidsys),               /* 124 */
 #endif /* SOLARIS_UUIDSYS_SYSCALL */
+#if defined(HAVE_MREMAP)
+   GENX_(__NR_mremap,               sys_mremap),                /* 126 (Solaris only, not Illumos) */
+#endif /* HAVE_MREMAP */
    SOLX_(__NR_mmapobj,              sys_mmapobj),               /* 127 */
    GENX_(__NR_setrlimit,            sys_setrlimit),             /* 128 */
    GENXY(__NR_getrlimit,            sys_getrlimit),             /* 129 */
@@ -10897,7 +10920,7 @@ static SyscallTableEntry syscall_table[] = {
    SOLX_(__NR_seteuid,              sys_seteuid),               /* 141 */
    SOLX_(__NR_forksys,              sys_forksys),               /* 142 */
 #if defined(SOLARIS_GETRANDOM_SYSCALL)
-   SOLXY(__NR_getrandom,            sys_getrandom),             /* 143 */
+   SOLXY(__NR_getrandom,            sys_getrandom),             /* 143 (Solaris) 126 (Illumos) */
 #endif /* SOLARIS_GETRANDOM_SYSCALL */
    SOLXY(__NR_sigtimedwait,         sys_sigtimedwait),          /* 144 */
    SOLX_(__NR_yield,                sys_yield),                 /* 146 */
@@ -10943,7 +10966,7 @@ static SyscallTableEntry syscall_table[] = {
    SOLXY(__NR_auditsys,             sys_auditsys),              /* 186 */
    SOLX_(__NR_p_online,             sys_p_online),              /* 189 */
    SOLX_(__NR_sigqueue,             sys_sigqueue),              /* 190 */
-   GENXY(__NR_clock_gettime,        sys_clock_gettime),         /* 191 */
+   SOLXY(__NR_clock_gettime,        sys_clock_gettime),         /* 191 */
    SOLX_(__NR_clock_settime,        sys_clock_settime),         /* 192 */
    SOLXY(__NR_clock_getres,         sys_clock_getres),          /* 193 */
    SOLXY(__NR_timer_create,         sys_timer_create),          /* 194 */

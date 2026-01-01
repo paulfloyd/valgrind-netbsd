@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -241,6 +241,19 @@ void VG_(describe_addr) ( DiEpoch ep, Addr a, /*OUT*/AddrInfo* ai )
             if (tid != VG_INVALID_THREADID)
                stackPos = StackPos_guard_page;
          }
+         /*
+          * On FreeBSD the above heuristic fails since version 14.0
+          *
+          * I think that is because of a bug or at least a misfeature
+          * in the way that the kernel grows mmap'd MAP_STACK memory
+          * See https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=277382
+          *
+          * I could add a lot of ugliness like
+          * "if the address is RW and sysctl security.bsd.stack_guard_page
+          * times the page size is PROT_NONE then it's a wonky guard page"
+          *
+          * Naaah.
+          */
       }
 
       if (tid != VG_INVALID_THREADID) {
@@ -323,12 +336,23 @@ void VG_(describe_addr) ( DiEpoch ep, Addr a, /*OUT*/AddrInfo* ai )
        *
        */
       if (seg != NULL
+#if defined(VGO_solaris)
           && ( seg->kind == SkAnonC || seg->kind == SkFileC )
-          && ( ( VG_(brk_base) <= a && a < VG_(brk_limit) )
-               ||
-               ( VG_(brk_limit)    <= a
-                 && seg->start     <= VG_(brk_limit)
-                 && VG_(brk_limit) <= seg->end+1   ) )) {
+#else
+          && seg->kind == SkAnonC
+#endif /* VGO_solaris */
+          && VG_(brk_limit) >= seg->start
+          && VG_(brk_limit) <= seg->end+1) {
+         /* Address a is in a Anon Client segment which contains
+            VG_(brk_limit). So, this segment is the brk data segment
+            as initimg-linux.c:setup_client_dataseg maps an anonymous
+            segment followed by a reservation, with one reservation
+            page that will never be used by syswrap-generic.c:do_brk,
+            when increasing VG_(brk_limit).
+            So, the brk data segment will never be merged with the
+            next segment, and so an address in that area will
+            either be in the brk data segment, or in the unmapped
+            part of the brk data segment reservation. */
          ai->tag = Addr_BrkSegment;
          ai->Addr.BrkSegment.brk_limit = VG_(brk_limit);
          return;

@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -332,15 +332,10 @@ Int find_chunk_for ( Addr       ptr,
 
 
 static MC_Chunk**
-find_active_chunks(Int* pn_chunks)
+get_sorted_array_of_active_chunks(Int* pn_chunks)
 {
-   // Our goal is to construct a set of chunks that includes every
-   // mempool chunk, and every malloc region that *doesn't* contain a
-   // mempool chunk.
-   MC_Mempool *mp;
-   MC_Chunk **mallocs, **chunks, *mc;
-   UInt n_mallocs, n_chunks, m, s;
-   Bool *malloc_chunk_holds_a_pool_chunk;
+   UInt n_mallocs;
+   MC_Chunk **mallocs;
 
    // First we collect all the malloc chunks into an array and sort it.
    // We do this because we want to query the chunks by interior
@@ -353,73 +348,98 @@ find_active_chunks(Int* pn_chunks)
    }
    VG_(ssort)(mallocs, n_mallocs, sizeof(VgHashNode*), compare_MC_Chunks);
 
-   // Then we build an array containing a Bool for each malloc chunk,
-   // indicating whether it contains any mempools.
-   malloc_chunk_holds_a_pool_chunk = VG_(calloc)( "mc.fas.1",
-                                                  n_mallocs, sizeof(Bool) );
-   n_chunks = n_mallocs;
+   // If there are no mempools (for most users, this is the case),
+   //    n_mallocs and mallocs is the final result
+   // otherwise we need to do special handling for mempools.
 
-   // Then we loop over the mempool tables. For each chunk in each
-   // pool, we set the entry in the Bool array corresponding to the
-   // malloc chunk containing the mempool chunk.
-   VG_(HT_ResetIter)(MC_(mempool_list));
-   while ( (mp = VG_(HT_Next)(MC_(mempool_list))) ) {
-      VG_(HT_ResetIter)(mp->chunks);
-      while ( (mc = VG_(HT_Next)(mp->chunks)) ) {
+   if (VG_(HT_count_nodes)(MC_(mempool_list)) > 0) {
+      // Our goal is to construct a set of chunks that includes every
+      // mempool chunk, and every malloc region that *doesn't* contain a
+      // mempool chunk.
+      MC_Mempool *mp;
+      MC_Chunk **chunks, *mc;
+      UInt n_chunks, m, s;
+      Bool *malloc_chunk_holds_a_pool_chunk;
 
-         // We'll need to record this chunk.
-         n_chunks++;
+      // We build an array containing a Bool for each malloc chunk,
+      // indicating whether it contains any mempools.
+      malloc_chunk_holds_a_pool_chunk = VG_(calloc)( "mc.fas.1",
+                                                     n_mallocs, sizeof(Bool) );
+      n_chunks = n_mallocs;
 
-         // Possibly invalidate the malloc holding the beginning of this chunk.
-         m = find_chunk_for(mc->data, mallocs, n_mallocs);
-         if (m != -1 && malloc_chunk_holds_a_pool_chunk[m] == False) {
-            tl_assert(n_chunks > 0);
-            n_chunks--;
-            malloc_chunk_holds_a_pool_chunk[m] = True;
-         }
+      // Then we loop over the mempool tables. For each chunk in each
+      // pool, we set the entry in the Bool array corresponding to the
+      // malloc chunk containing the mempool chunk.
+      VG_(HT_ResetIter)(MC_(mempool_list));
+      while ( (mp = VG_(HT_Next)(MC_(mempool_list))) ) {
+         VG_(HT_ResetIter)(mp->chunks);
+         while ( (mc = VG_(HT_Next)(mp->chunks)) ) {
 
-         // Possibly invalidate the malloc holding the end of this chunk.
-         if (mc->szB > 1) {
-            m = find_chunk_for(mc->data + (mc->szB - 1), mallocs, n_mallocs);
+            // We'll need to record this chunk.
+            n_chunks++;
+
+            // Possibly invalidate the malloc holding the beginning of this chunk.
+            m = find_chunk_for(mc->data, mallocs, n_mallocs);
             if (m != -1 && malloc_chunk_holds_a_pool_chunk[m] == False) {
                tl_assert(n_chunks > 0);
                n_chunks--;
                malloc_chunk_holds_a_pool_chunk[m] = True;
             }
+
+            // Possibly invalidate the malloc holding the end of this chunk.
+            if (mc->szB > 1) {
+               m = find_chunk_for(mc->data + (mc->szB - 1), mallocs, n_mallocs);
+               if (m != -1 && malloc_chunk_holds_a_pool_chunk[m] == False) {
+                  tl_assert(n_chunks > 0);
+                  n_chunks--;
+                  malloc_chunk_holds_a_pool_chunk[m] = True;
+               }
+            }
          }
       }
-   }
-   tl_assert(n_chunks > 0);
+      tl_assert(n_chunks > 0);
 
-   // Create final chunk array.
-   chunks = VG_(malloc)("mc.fas.2", sizeof(VgHashNode*) * (n_chunks));
-   s = 0;
+      // Create final chunk array.
+      chunks = VG_(malloc)("mc.fas.2", sizeof(VgHashNode*) * (n_chunks));
+      s = 0;
 
-   // Copy the mempool chunks and the non-marked malloc chunks into a
-   // combined array of chunks.
-   VG_(HT_ResetIter)(MC_(mempool_list));
-   while ( (mp = VG_(HT_Next)(MC_(mempool_list))) ) {
-      VG_(HT_ResetIter)(mp->chunks);
-      while ( (mc = VG_(HT_Next)(mp->chunks)) ) {
-         tl_assert(s < n_chunks);
-         chunks[s++] = mc;
+      // Copy the mempool chunks and the non-marked malloc chunks into a
+      // combined array of chunks.
+      VG_(HT_ResetIter)(MC_(mempool_list));
+      while ( (mp = VG_(HT_Next)(MC_(mempool_list))) ) {
+         VG_(HT_ResetIter)(mp->chunks);
+         while ( (mc = VG_(HT_Next)(mp->chunks)) ) {
+            tl_assert(s < n_chunks);
+            chunks[s++] = mc;
+         }
       }
-   }
-   for (m = 0; m < n_mallocs; ++m) {
-      if (!malloc_chunk_holds_a_pool_chunk[m]) {
-         tl_assert(s < n_chunks);
-         chunks[s++] = mallocs[m];
+      for (m = 0; m < n_mallocs; ++m) {
+         if (!malloc_chunk_holds_a_pool_chunk[m]) {
+            tl_assert(s < n_chunks);
+            chunks[s++] = mallocs[m];
+         }
       }
+      tl_assert(s == n_chunks);
+
+      // Free temporaries.
+      VG_(free)(mallocs);
+      VG_(free)(malloc_chunk_holds_a_pool_chunk);
+
+      *pn_chunks = n_chunks;
+
+      // Sort the array so blocks are in ascending order in memory.
+      VG_(ssort)(chunks, n_chunks, sizeof(VgHashNode*), compare_MC_Chunks);
+
+      // Sanity check -- make sure they're in order.
+      for (int i = 0; i < n_chunks-1; i++) {
+         tl_assert( chunks[i]->data <= chunks[i+1]->data);
+      }
+
+      return chunks;
+   } else {
+      *pn_chunks = n_mallocs;
+      return mallocs;
    }
-   tl_assert(s == n_chunks);
-
-   // Free temporaries.
-   VG_(free)(mallocs);
-   VG_(free)(malloc_chunk_holds_a_pool_chunk);
-
-   *pn_chunks = n_chunks;
-
-   return chunks;
 }
 
 /*------------------------------------------------------------*/
@@ -1103,7 +1123,10 @@ lc_scan_memory(Addr start, SizeT len, Bool is_prior_definite,
 #     else
       // On other platforms, just skip one Addr.
       lc_sig_skipped_szB += sizeof(Addr);
+      // PJF asserts are always on
+      // coverity[ASSERT_SIDE_EFFECT:FALSE]
       tl_assert(bad_scanned_addr >= VG_ROUNDUP(start, sizeof(Addr)));
+      // coverity[ASSERT_SIDE_EFFECT:FALSE]
       tl_assert(bad_scanned_addr < VG_ROUNDDN(start+len, sizeof(Addr)));
       ptr = bad_scanned_addr + sizeof(Addr); // Unaddressable, - skip it.
 #endif
@@ -1275,25 +1298,29 @@ static void get_printing_rules(LeakCheckParams* lcp,
    Bool delta_considered;
 
    switch (lcp->deltamode) {
-   case LCD_Any: 
+   case LCD_Any:
       delta_considered = lr->num_blocks > 0;
       break;
    case LCD_Increased:
-      delta_considered 
+      delta_considered
          = lr->szB > lr->old_szB
          || lr->indirect_szB > lr->old_indirect_szB
          || lr->num_blocks > lr->old_num_blocks;
       break;
-   case LCD_Changed: 
+   case LCD_Changed:
       delta_considered = lr->szB != lr->old_szB
          || lr->indirect_szB != lr->old_indirect_szB
          || lr->num_blocks != lr->old_num_blocks;
+      break;
+   case LCD_New:
+      delta_considered
+         = lr->num_blocks > 0 && lr->old_num_blocks == 0;
       break;
    default:
       tl_assert(0);
    }
 
-   *print_record = lcp->mode == LC_Full && delta_considered 
+   *print_record = lcp->mode == LC_Full && delta_considered
       && RiS(lr->key.state,lcp->show_leak_kinds);
    // We don't count a leaks as errors with lcp->mode==LC_Summary.
    // Otherwise you can get high error counts with few or no error
@@ -1695,7 +1722,9 @@ static void print_results(ThreadId tid, LeakCheckParams* lcp)
       VG_(XT_delete)(leak_xt);
    }
 
-   if (VG_(clo_verbosity) > 0 && !VG_(clo_xml)) {
+   UInt (*umsg_or_xml)( const HChar *, ... )
+     = VG_(clo_xml) ? VG_(printf_xml) : VG_(umsg);
+   if (VG_(clo_verbosity) > 0) {
       HChar d_bytes[31];
       HChar d_blocks[31];
 #     define DBY(new,old) \
@@ -1705,23 +1734,42 @@ static void print_results(ThreadId tid, LeakCheckParams* lcp)
       MC_(snprintf_delta) (d_blocks, sizeof(d_blocks), (new), (old), \
                            lcp->deltamode)
 
-      VG_(umsg)("LEAK SUMMARY:\n");
-      VG_(umsg)("   definitely lost: %'lu%s bytes in %'lu%s blocks\n",
+      umsg_or_xml(VG_(clo_xml) ? "<leak_summary>\n" : "LEAK SUMMARY:\n");
+      umsg_or_xml(VG_(clo_xml) ?
+                  "  <definitely_lost>\n"
+                  "    <bytes>%'lu%s</bytes>\n"
+                  "    <blocks>%'lu%s</blocks>\n"
+                  "  </definitely_lost>\n" :
+                  "   definitely lost: %'lu%s bytes in %'lu%s blocks\n",
                 MC_(bytes_leaked), 
                 DBY (MC_(bytes_leaked), old_bytes_leaked),
                 MC_(blocks_leaked),
                 DBL (MC_(blocks_leaked), old_blocks_leaked));
-      VG_(umsg)("   indirectly lost: %'lu%s bytes in %'lu%s blocks\n",
+      umsg_or_xml(VG_(clo_xml) ?
+                  "  <indirectly_lost>\n"
+                  "    <bytes>%'lu%s</bytes>\n"
+                  "    <blocks>%'lu%s</blocks>\n"
+                  "  </indirectly_lost>\n" :
+                  "   indirectly lost: %'lu%s bytes in %'lu%s blocks\n",
                 MC_(bytes_indirect), 
                 DBY (MC_(bytes_indirect), old_bytes_indirect),
                 MC_(blocks_indirect),
                 DBL (MC_(blocks_indirect), old_blocks_indirect));
-      VG_(umsg)("     possibly lost: %'lu%s bytes in %'lu%s blocks\n",
+      umsg_or_xml(VG_(clo_xml) ?
+                  "  <possibly_lost>\n"
+                  "    <bytes>%'lu%s</bytes>\n"
+                  "    <blocks>%'lu%s</blocks>\n"
+                  "  </possibly_lost>\n" :
+                  "     possibly lost: %'lu%s bytes in %'lu%s blocks\n",
                 MC_(bytes_dubious), 
                 DBY (MC_(bytes_dubious), old_bytes_dubious), 
                 MC_(blocks_dubious),
                 DBL (MC_(blocks_dubious), old_blocks_dubious));
-      VG_(umsg)("   still reachable: %'lu%s bytes in %'lu%s blocks\n",
+      umsg_or_xml(VG_(clo_xml) ?
+                  "  <still_reachable>\n"
+                  "    <bytes>%'lu%s</bytes>\n"
+                  "    <blocks>%'lu%s</blocks>\n" :
+                  "   still reachable: %'lu%s bytes in %'lu%s blocks\n",
                 MC_(bytes_reachable), 
                 DBY (MC_(bytes_reachable), old_bytes_reachable), 
                 MC_(blocks_reachable),
@@ -1729,15 +1777,21 @@ static void print_results(ThreadId tid, LeakCheckParams* lcp)
       for (i = 0; i < N_LEAK_CHECK_HEURISTICS; i++)
          if (old_blocks_heuristically_reachable[i] > 0 
              || MC_(blocks_heuristically_reachable)[i] > 0) {
-            VG_(umsg)("                      of which "
+            umsg_or_xml(VG_(clo_xml) ? "" : "                      of which "
                       "reachable via heuristic:\n");
             break;
          }
       for (i = 0; i < N_LEAK_CHECK_HEURISTICS; i++)
          if (old_blocks_heuristically_reachable[i] > 0 
              || MC_(blocks_heuristically_reachable)[i] > 0)
-            VG_(umsg)("                        %-19s: "
-                      "%'lu%s bytes in %'lu%s blocks\n",
+            umsg_or_xml(VG_(clo_xml) ?
+                        "    <reachable_heuristic>\n"
+                        "      <kind>%ls</kind>\n"
+                        "      <bytes>%'lu%s</bytes>\n"
+                        "      <blocks>%'lu%s</blocks>\n"
+                        "    </reachable_heuristic>\n" :
+                        "                        %-19s: "
+                        "%'lu%s bytes in %'lu%s blocks\n",
                       pp_heuristic(i),
                       MC_(bytes_heuristically_reachable)[i], 
                       DBY (MC_(bytes_heuristically_reachable)[i],
@@ -1745,32 +1799,41 @@ static void print_results(ThreadId tid, LeakCheckParams* lcp)
                       MC_(blocks_heuristically_reachable)[i],
                       DBL (MC_(blocks_heuristically_reachable)[i],
                            old_blocks_heuristically_reachable[i]));
-      VG_(umsg)("        suppressed: %'lu%s bytes in %'lu%s blocks\n",
-                MC_(bytes_suppressed), 
-                DBY (MC_(bytes_suppressed), old_bytes_suppressed), 
+      if (VG_(clo_xml) && MC_(bytes_reachable)) {
+         umsg_or_xml("  </still_reachable>\n");
+      }
+      umsg_or_xml(VG_(clo_xml) ?
+                  "  <suppressed>\n"
+                  "    <bytes>%'lu%s</bytes>\n"
+                  "    <blocks>%'lu%s</blocks>\n"
+                  "  </suppressed>\n" :
+                  "        suppressed: %'lu%s bytes in %'lu%s blocks\n",
+                MC_(bytes_suppressed),
+                DBY (MC_(bytes_suppressed), old_bytes_suppressed),
                 MC_(blocks_suppressed),
                 DBL (MC_(blocks_suppressed), old_blocks_suppressed));
       if (lcp->mode != LC_Full &&
           (MC_(blocks_leaked) + MC_(blocks_indirect) +
            MC_(blocks_dubious) + MC_(blocks_reachable)) > 0) {
          if (lcp->requested_by_monitor_command)
-            VG_(umsg)("To see details of leaked memory, "
-                      "give 'full' arg to leak_check\n");
+            umsg_or_xml(VG_(clo_xml) ? "" : "To see details of leaked memory, "
+                        "give 'full' arg to leak_check\n");
          else
-            VG_(umsg)("Rerun with --leak-check=full to see details "
-                      "of leaked memory\n");
+            umsg_or_xml(VG_(clo_xml) ? "" : "Rerun with --leak-check=full to "
+                        "see details of leaked memory\n");
       }
       if (lcp->mode == LC_Full &&
           MC_(blocks_reachable) > 0 && !RiS(Reachable,lcp->show_leak_kinds)) {
-         VG_(umsg)("Reachable blocks (those to which a pointer "
-                   "was found) are not shown.\n");
+         umsg_or_xml(VG_(clo_xml) ? "" : "Reachable blocks (those to which a "
+                     "pointer was found) are not shown.\n");
          if (lcp->requested_by_monitor_command)
-            VG_(umsg)("To see them, add 'reachable any' args to leak_check\n");
+            umsg_or_xml(VG_(clo_xml) ? "" : "To see them, add 'reachable any' "
+                        "args to leak_check\n");
          else
-            VG_(umsg)("To see them, rerun with: --leak-check=full "
-                      "--show-leak-kinds=all\n");
+            umsg_or_xml(VG_(clo_xml) ? "" : "To see them, rerun with: "
+                        "--leak-check=full --show-leak-kinds=all\n");
       }
-      VG_(umsg)("\n");
+      umsg_or_xml(VG_(clo_xml) ? "</leak_summary>\n\n" : "\n");
       #undef DBL
       #undef DBY
    }
@@ -2016,7 +2079,7 @@ void MC_(detect_memory_leaks) ( ThreadId tid, LeakCheckParams* lcp)
       VG_(free)(lc_chunks);
       lc_chunks = NULL;
    }
-   lc_chunks = find_active_chunks(&lc_n_chunks);
+   lc_chunks = get_sorted_array_of_active_chunks(&lc_n_chunks);
    lc_chunks_n_frees_marker = MC_(get_cmalloc_n_frees)();
    if (lc_n_chunks == 0) {
       tl_assert(lc_chunks == NULL);
@@ -2029,19 +2092,17 @@ void MC_(detect_memory_leaks) ( ThreadId tid, LeakCheckParams* lcp)
          VG_(OSetGen_Destroy) (lr_table);
          lr_table = NULL;
       }
-      if (VG_(clo_verbosity) >= 1 && !VG_(clo_xml)) {
-         VG_(umsg)("All heap blocks were freed -- no leaks are possible\n");
-         VG_(umsg)("\n");
+      if (VG_(clo_verbosity) >= 1) {
+         if (!VG_(clo_xml)) {
+            VG_(umsg)("All heap blocks were freed -- no leaks are possible\n");
+            VG_(umsg)("\n");
+         } else
+            VG_(printf_xml)("<all_heap_blocks_freed>true</all_heap_blocks_freed>\n\n");
       }
       return;
-   }
-
-   // Sort the array so blocks are in ascending order in memory.
-   VG_(ssort)(lc_chunks, lc_n_chunks, sizeof(VgHashNode*), compare_MC_Chunks);
-
-   // Sanity check -- make sure they're in order.
-   for (i = 0; i < lc_n_chunks-1; i++) {
-      tl_assert( lc_chunks[i]->data <= lc_chunks[i+1]->data);
+   } else {
+      if (VG_(clo_verbosity) >= 1 && VG_(clo_xml))
+         VG_(printf_xml)("<all_heap_blocks_freed>false</all_heap_blocks_freed>\n\n");
    }
 
    // Sanity check -- make sure they don't overlap.  One exception is that
@@ -2258,7 +2319,7 @@ void MC_(who_points_at) ( Addr address, SizeT szB)
       VG_(umsg) ("Searching for pointers pointing in %lu bytes from %#lx\n",
                  szB, address);
 
-   chunks = find_active_chunks(&n_chunks);
+   chunks = get_sorted_array_of_active_chunks(&n_chunks);
 
    // Scan memory root-set, searching for ptr pointing in address[szB]
    scan_memory_root_set(address, szB);
@@ -2282,4 +2343,3 @@ void MC_(who_points_at) ( Addr address, SizeT szB)
 /*--------------------------------------------------------------------*/
 /*--- end                                                          ---*/
 /*--------------------------------------------------------------------*/
-

@@ -3,15 +3,15 @@
 /*--------------------------------------------------------------------*/
 
 /*
-   This file is part of Cachegrind, a Valgrind tool for cache
-   profiling programs.
+   This file is part of Cachegrind, a high-precision tracing profiler
+   built with Valgrind.
 
    Copyright (C) 2011-2017 Nicholas Nethercote
       njn@valgrind.org
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -41,6 +41,16 @@ static void configure_caches(cache_t* I1c, cache_t* D1c, cache_t* LLc,
 // string otherwise.
 static const HChar* check_cache(cache_t* cache)
 {
+   if (cache->line_size == 0)
+   {
+      return "Cache line size is zero.\n";
+   }
+
+   if (cache->assoc == 0)
+   {
+      return "Cache associativity is zero.\n";
+   }
+
    // Simulator requires set count to be a power of two.
    if ((cache->size % (cache->line_size * cache->assoc) != 0) ||
        (-1 == VG_(log2)(cache->size/cache->line_size/cache->assoc)))
@@ -240,7 +250,6 @@ maybe_tweak_LLc(cache_t *LLc)
         power of two.  Then, increase the associativity by that
         factor.  Finally, re-calculate the total size so as to make
         sure it divides exactly between the sets. */
-     tl_assert(old_nSets >= 0);
      UInt new_nSets = floor_power_of_2 ( old_nSets );
      tl_assert(new_nSets > 0 && new_nSets < old_nSets);
      Double factor = (Double)old_nSets / (Double)new_nSets;
@@ -297,7 +306,7 @@ void VG_(post_clo_init_configure_caches)(cache_t* I1c,
    check_cache_or_override ("LL", LLc, DEFINED(clo_LLc));
 
    // Then replace with any defined on the command line.  (Already checked in
-   // VG(parse_clo_cache_opt)().)
+   // VG(str_clo_cache_opt)().)
    if (DEFINED(clo_I1c)) { *I1c = *clo_I1c; }
    if (DEFINED(clo_D1c)) { *D1c = *clo_D1c; }
    if (DEFINED(clo_LLc)) { *LLc = *clo_LLc; }
@@ -311,13 +320,13 @@ void VG_(post_clo_init_configure_caches)(cache_t* I1c,
 #undef DEFINED
 }
 
-void VG_(print_cache_clo_opts)()
+void VG_(print_cache_clo_opts)(void)
 {
    VG_(printf)(
 "    --I1=<size>,<assoc>,<line_size>  set I1 cache manually\n"
 "    --D1=<size>,<assoc>,<line_size>  set D1 cache manually\n"
 "    --LL=<size>,<assoc>,<line_size>  set LL cache manually\n"
-               );
+   );
 }
 
 
@@ -426,34 +435,10 @@ configure_caches(cache_t *I1c, cache_t *D1c, cache_t *LLc,
    *LLc = (cache_t) { 262144, 8, 64 };
 
 #elif defined(VGA_s390x)
-   //
-   // Here is the cache data from older machine models:
-   //
-   //           I1            D1      I/D L2
-   // z900  256k/256/4    256k/256/4   16MB
-   // z800  256k/256/4    256k/256/4    8MB
-   // z990  256k/256/4    256k/256/4   32MB
-   // z890  256k/256/4    256k/256/4   32MB
-   // z9    256k/256/4    256k/256/4   40MB
-   //
-   // Sources:
-   // (1) IBM System z9 109 Technical Introduction
-   //     www.redbooks.ibm.com/redbooks/pdfs/sg246669.pdf
-   // (2) The microarchitecture of the IBM eServer z900 processor
-   //     IBM Journal of Research and Development
-   //     Volume 46, Number 4/5, pp 381-395, July/September 2002
-   // (3) The IBM eServer z990 microprocessor
-   //     IBM Journal of Research and Development
-   //     Volume 48, Number 3/4, pp 295-309, May/July 2004 
-   // (4) Charles Webb, IBM
-   //
-   // L2 data is unfortunately incomplete. Otherwise, we could support
-   // machines without the ECAG insn by looking at VEX_S390X_MODEL(hwcaps).
 
-   // Default cache configuration is z10-EC  (Source: ECAG insn)
-   *I1c = (cache_t) {    65536,  4, 256 };
-   *D1c = (cache_t) {   131072,  8, 256 };
-   *LLc = (cache_t) { 50331648, 24, 256 };
+   // Should never get here as the min. required machine model can
+   // query cache information via the ECAG insn.
+   tl_assert(0);
 
 #elif defined(VGA_mips32) || defined(VGA_nanomips)
 
@@ -474,6 +459,13 @@ configure_caches(cache_t *I1c, cache_t *D1c, cache_t *LLc,
    *I1c = (cache_t) {  65536, 2, 64 };
    *D1c = (cache_t) {  65536, 2, 64 };
    *LLc = (cache_t) { 262144, 8, 64 };
+
+#elif defined(VGA_riscv64)
+
+   // Default cache configuration is SiFive FU740-C000 (HiFive Unmatched)
+   *I1c = (cache_t) {   32768,  4, 64 };
+   *D1c = (cache_t) {   32768,  8, 64 };
+   *LLc = (cache_t) { 2097152, 16, 64 };
 
 #else
 

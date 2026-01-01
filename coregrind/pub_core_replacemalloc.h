@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -41,10 +41,10 @@
 struct vg_mallocfunc_info {
    void* (*tl_malloc)              (ThreadId tid, SizeT n);
    void* (*tl___builtin_new)       (ThreadId tid, SizeT n);
-   void* (*tl___builtin_new_aligned) (ThreadId tid, SizeT n, SizeT align);
+   void* (*tl___builtin_new_aligned) (ThreadId tid, SizeT n, SizeT align, SizeT orig_align);
    void* (*tl___builtin_vec_new)   (ThreadId tid, SizeT n);
-   void* (*tl___builtin_vec_new_aligned) (ThreadId tid, SizeT n, SizeT align);
-   void* (*tl_memalign)            (ThreadId tid, SizeT align, SizeT n);
+   void* (*tl___builtin_vec_new_aligned) (ThreadId tid, SizeT n, SizeT align, SizeT orig_align);
+   void* (*tl_memalign)            (ThreadId tid, SizeT align, SizeT orig_align, SizeT n);
    void* (*tl_calloc)              (ThreadId tid, SizeT nmemb, SizeT n);
    void  (*tl_free)                (ThreadId tid, void* p);
    void  (*tl___builtin_delete)    (ThreadId tid, void* p);
@@ -53,8 +53,14 @@ struct vg_mallocfunc_info {
    void  (*tl___builtin_vec_delete_aligned)(ThreadId tid, void* p, SizeT n);
    void* (*tl_realloc)             (ThreadId tid, void* p, SizeT size);
    SizeT (*tl_malloc_usable_size)  (ThreadId tid, void* payload);
+#if defined(VGO_linux) || defined(VGO_solaris)
    void  (*mallinfo)               (ThreadId tid, struct vg_mallinfo* mi);
+#endif
+#if defined(VGO_linux)
+   void  (*mallinfo2)              (ThreadId tid, struct vg_mallinfo2* mi);
+#endif
    Bool	clo_trace_malloc;
+   Bool  clo_realloc_zero_bytes_frees;
 };
 
 #endif   // __PUB_CORE_REPLACEMALLOC_H

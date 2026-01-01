@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -46,8 +46,11 @@ extern HChar* VG_(strdup)        ( const HChar* cc, const HChar* s );
 
 // TODO: move somewhere else
 // Call here to bomb the system when out of memory (mmap anon fails)
+// Provide the VKI errno if possible (normally the result of sr_Err),
+// may be zero if unknown.
 __attribute__((noreturn))
-extern void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB );
+extern void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB,
+                                          UWord err );
 
 // VG_(perm_malloc) is for allocating small blocks which are
 // never released. The overhead for such blocks is minimal.

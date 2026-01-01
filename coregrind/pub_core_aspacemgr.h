@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -340,7 +340,7 @@ extern Bool VG_(am_relocate_nooverlap_client)( /*OUT*/Bool* need_discard,
 #else
 # define VG_STACK_GUARD_SZB  8192   // 2 pages
 #endif
-# define VG_DEFAULT_STACK_ACTIVE_SZB 1048576 // (4096 * 256) = 1Mb 
+# define VG_DEFAULT_STACK_ACTIVE_SZB 1048576 // (4096 * 256) = 1Mb
 
 typedef struct _VgStack VgStack;
 
@@ -384,9 +384,10 @@ extern Bool VG_(am_search_for_new_segment)(Addr *start, SizeT *size,
                                            UInt *prot);
 #endif
 
+#if defined(VGO_freebsd)
 /* For kern.usrstack syscall on FreeBSD */
 extern Word VG_(get_usrstack)(void);
-
+#endif
 
 #endif   // __PUB_CORE_ASPACEMGR_H
 

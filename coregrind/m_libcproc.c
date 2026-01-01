@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -67,7 +67,7 @@ HChar** VG_(client_envp) = NULL;
 const HChar *VG_(libdir) = VG_LIBDIR;
 
 const HChar *VG_(LD_PRELOAD_var_name) =
-#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
    "LD_PRELOAD";
 #elif defined(VGO_darwin)
    "DYLD_INSERT_LIBRARIES";
@@ -268,21 +268,13 @@ void VG_(env_remove_valgrind_env_stuff)(HChar** envp, Bool ro_strings,
    VG_(sprintf)(buf, "%s*", VG_(libdir));
    mash_colon_env(ld_library_path_str, buf);
 
-   // And if these variables become empty, remove them
-   // completely. Leaving empty variables causes troubles, e.g. empty
-   // LD_PRELOAD causes NetBSD ld.so to try to load a file "".
-   if (ld_preload_str != NULL && VG_(strlen)(ld_preload_str) == 0)
-       VG_(env_unsetenv)(envp, "LD_PRELOAD", free_fn);
-   if (ld_library_path_str != NULL && VG_(strlen)(ld_library_path_str) == 0)
-       VG_(env_unsetenv)(envp, "LD_LIBRARY_PATH", free_fn);
-   if (dyld_insert_libraries_str != NULL && VG_(strlen)(dyld_insert_libraries_str) == 0)
-       VG_(env_unsetenv)(envp, "DYLD_INSERT_LIBRARIES", free_fn);
-
    // Remove VALGRIND_LAUNCHER variable.
    VG_(env_unsetenv)(envp, VALGRIND_LAUNCHER, free_fn);
 
    // Remove DYLD_SHARED_REGION variable.
    VG_(env_unsetenv)(envp, "DYLD_SHARED_REGION", free_fn);
+
+   // XXX if variable becomes empty, remove it completely?
 
    VG_(free)(buf);
 }
@@ -356,7 +348,7 @@ void VG_(client_cmd_and_args)(HChar *buffer, SizeT buf_size)
 
 Int VG_(waitpid)(Int pid, Int *status, Int options)
 {
-#  if defined(VGO_linux) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_freebsd)
    SysRes res = VG_(do_syscall4)(__NR_wait4,
                                  pid, (UWord)status, options, 0);
    return sr_isError(res) ? -1 : sr_Res(res);
@@ -706,7 +698,8 @@ Int VG_(gettid)(void)
        * the /proc/self link is pointing...
        */
 
-#     if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux)
+#     if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
+         || defined(VGP_riscv64_linux)
       res = VG_(do_syscall4)(__NR_readlinkat, VKI_AT_FDCWD,
                              (UWord)"/proc/self",
                              (UWord)pid, sizeof(pid));
@@ -761,9 +754,10 @@ Int VG_(getpid) ( void )
 Int VG_(getpgrp) ( void )
 {
    /* ASSUMES SYSCALL ALWAYS SUCCEEDS */
-#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux)
+#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
+      || defined(VGP_riscv64_linux)
    return sr_Res( VG_(do_syscall1)(__NR_getpgid, 0) );
-#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    return sr_Res( VG_(do_syscall0)(__NR_getpgrp) );
 #  elif defined(VGO_solaris)
    /* Uses the shared pgrpsys syscall, 0 for the getpgrp variant. */
@@ -776,7 +770,7 @@ Int VG_(getpgrp) ( void )
 Int VG_(getppid) ( void )
 {
    /* ASSUMES SYSCALL ALWAYS SUCCEEDS */
-#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    return sr_Res( VG_(do_syscall0)(__NR_getppid) );
 #  elif defined(VGO_solaris)
    /* Uses the shared getpid/getppid syscall, val2 contains a parent pid. */
@@ -810,7 +804,7 @@ Int VG_(geteuid) ( void )
 
 Int VG_(getegid) ( void )
 {
-#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    /* ASSUMES SYSCALL ALWAYS SUCCEEDS */
 #    if defined(__NR_getegid32)
    // We use the 32-bit version if it's supported.  Otherwise, IDs greater
@@ -858,7 +852,7 @@ Int VG_(getgroups)( Int size, UInt* list )
         || defined(VGO_darwin) || defined(VGP_s390x_linux)    \
         || defined(VGP_mips32_linux) || defined(VGP_arm64_linux) \
         || defined(VGO_solaris) || defined(VGP_nanomips_linux) \
-        || defined(VGO_freebsd) || defined(VGO_netbsd)
+        || defined(VGP_riscv64_linux) || defined(VGO_freebsd) || defined(VGO_netbsd)
    SysRes sres;
    sres = VG_(do_syscall2)(__NR_getgroups, size, (Addr)list);
    if (sr_isError(sres))
@@ -913,6 +907,8 @@ static void register_sigchld_ignore ( Int pid, Int fds[2])
       return;
 
    if (pid == 0) {
+      /* We are the child, close writing fd that we don't use.  */
+      VG_(close)(fds[1]);
       /* Before proceeding, ensure parent has recorded child PID in map
          of SIGCHLD to ignore */
       while (child_wait == 1)
@@ -924,6 +920,7 @@ static void register_sigchld_ignore ( Int pid, Int fds[2])
          }
       }
 
+      /* Now close reading fd.  */
       VG_(close)(fds[0]);
       return;
    }
@@ -934,11 +931,15 @@ static void register_sigchld_ignore ( Int pid, Int fds[2])
       ht_sigchld_ignore = VG_(HT_construct)("ht.sigchld.ignore");
    VG_(HT_add_node)(ht_sigchld_ignore, n);
 
+   /* We are the parent process, close read fd that we don't use.  */
+   VG_(close)(fds[0]);
+
    child_wait = 0;
    if (VG_(write)(fds[1], &child_wait, sizeof(Int)) <= 0)
       VG_(message)(Vg_DebugMsg,
          "warning: Unable to record PID of internal process (write)\n");
 
+   /* Now close writing fd.  */
    VG_(close)(fds[1]);
 }
 
@@ -952,7 +953,8 @@ Int VG_(fork) ( void )
       fds[0] = fds[1] = -1;
    }
 
-#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux)
+#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
+      || defined(VGP_riscv64_linux)
    SysRes res;
    res = VG_(do_syscall5)(__NR_clone, VKI_SIGCHLD,
                           (UWord)NULL, (UWord)NULL, (UWord)NULL, (UWord)NULL);
@@ -1017,7 +1019,7 @@ UInt VG_(read_millisecond_timer) ( void )
    static ULong base = 0;
    ULong  now;
 
-#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_solaris)
    { SysRes res;
      struct vki_timespec ts_now;
      res = VG_(do_syscall2)(__NR_clock_gettime, VKI_CLOCK_MONOTONIC,
@@ -1050,7 +1052,15 @@ UInt VG_(read_millisecond_timer) ( void )
      struct vki_timeval tv_now = { 0, 0 };
      res = VG_(do_syscall2)(__NR_gettimeofday, (UWord)&tv_now, (UWord)NULL);
      vg_assert(! sr_isError(res));
+#   if DARWIN_VERS >= DARWIN_10_13
+     now = tv_now.tv_sec * 1000000ULL + tv_now.tv_usec;
+#   else
+     // Weird: it seems that gettimeofday() doesn't fill in the timeval, but
+     // rather returns the tv_sec as the low 32 bits of the result and the
+     // tv_usec as the high 32 bits of the result.  (But the timeval cannot be
+     // NULL!)  See bug 200990.
      now = sr_Res(res) * 1000000ULL + sr_ResHI(res);
+#endif
    }
 
 #  else
@@ -1072,7 +1082,7 @@ void VG_(clock_gettime) ( struct vki_timespec *ts, vki_clockid_t clk_id )
                            (UWord)ts);
     vg_assert (sr_isError(res) == 0);
 }
-#  elif defined(VGO_darwin) || defined(VGO_netbsd)
+#  elif defined(VGO_darwin)
   /* See pub_tool_libcproc.h */
 #  else
 #    error "Unknown OS"
@@ -1124,13 +1134,6 @@ UInt VG_(get_user_milliseconds)(void)
       if (!sr_isError(sr)) {
          res = ru.ru_utime.tv_sec * 1000 + ru.ru_utime.tv_usec / 1000;
       }
-   }
-
-#  elif defined(VGO_netbsd)
-   {
-      //Unsure if this is the proper way to do this for NetBSD
-      //Placeholder
-      res = 0;
    }
 
 #  elif defined(VGO_darwin)
@@ -1209,12 +1212,17 @@ void VG_(do_atfork_child)(ThreadId tid)
 }
 
 /* ---------------------------------------------------------------------
-   FreeBSD sysctlbyname(), modfind(), etc
+   FreeBSD sysctlbyname, getosreldate, is32on64
    ------------------------------------------------------------------ */
 
 #if defined(VGO_freebsd)
 Int VG_(sysctlbyname)(const HChar *name, void *oldp, SizeT *oldlenp, const void *newp, SizeT newlen)
 {
+   vg_assert(name);
+#if ((__FreeBSD_version >= 1201522 && __FreeBSD_version <= 1300000) || __FreeBSD_version >= 1300045)
+   SysRes res = VG_(do_syscall6)(__NR___sysctlbyname, (RegWord)name, VG_(strlen)(name), (RegWord)oldp, (RegWord)oldlenp, (RegWord)newp, (RegWord)newlen);
+   return sr_isError(res) ? -1 : sr_Res(res);
+#else
    Int oid[2];
    Int real_oid[10];
    SizeT oidlen;
@@ -1229,6 +1237,7 @@ Int VG_(sysctlbyname)(const HChar *name, void *oldp, SizeT *oldlenp, const void 
    oidlen /= sizeof(int);
    error = VG_(sysctl)(real_oid, oidlen, oldp, oldlenp, newp, newlen);
    return error;
+ #endif
 }
 
 Int VG_(getosreldate)(void)
@@ -1245,7 +1254,7 @@ Int VG_(getosreldate)(void)
 
 Bool VG_(is32on64)(void)
 {
-#if defined(VGP_amd64_freebsd)
+#if defined(VGP_amd64_freebsd) || defined(VGP_arm64_freebsd)
    return False;
 #elif defined(VGP_x86_freebsd)
    SysRes res;
@@ -1307,7 +1316,7 @@ void VG_(invalidate_icache) ( void *ptr, SizeT nbytes )
    Addr endaddr   = startaddr + nbytes;
    VG_(do_syscall2)(__NR_ARM_cacheflush, startaddr, endaddr);
 
-#  elif defined(VGP_arm64_linux)
+#  elif defined(VGP_arm64_linux) || defined(VGP_arm64_freebsd)
    // This arm64_linux section of this function VG_(invalidate_icache)
    // is copied from
    // https://github.com/armvixl/vixl/blob/master/src/a64/cpu-a64.cc
@@ -1341,11 +1350,12 @@ void VG_(invalidate_icache) ( void *ptr, SizeT nbytes )
    */
 
    // Ask what the I and D line sizes are
-   UInt cache_type_register;
+   ULong read_mrs;
    // Copy the content of the cache type register to a core register.
    __asm__ __volatile__ ("mrs %[ctr], ctr_el0" // NOLINT
-                         : [ctr] "=r" (cache_type_register));
+                         : [ctr] "=r" (read_mrs));
 
+   UInt cache_type_register = read_mrs;
    const Int kDCacheLineSizeShift = 16;
    const Int kICacheLineSizeShift = 0;
    const UInt kDCacheLineSizeMask = 0xf << kDCacheLineSizeShift;
@@ -1428,8 +1438,20 @@ void VG_(invalidate_icache) ( void *ptr, SizeT nbytes )
    vg_assert( !sr_isError(sres) );
 
 # elif defined(VGA_nanomips)
-
    __builtin___clear_cache(ptr, (char*)ptr + nbytes);
+
+#  elif defined(VGP_riscv64_linux)
+   /* Make data stores to the area visible to all RISC-V harts. */
+   __asm__ __volatile__("fence w,r");
+
+   /* Ask the kernel to execute fence.i on all harts to guarantee that an
+      instruction fetch on each hart will see any previous data stores visible
+      to the same hart. */
+   Addr   startaddr = (Addr)ptr;
+   Addr   endaddr   = startaddr + nbytes;
+   SysRes sres = VG_(do_syscall3)(__NR_riscv_flush_icache, startaddr, endaddr,
+                                  0 /*flags*/);
+   vg_assert(!sr_isError(sres));
 
 #  endif
 }

@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -179,13 +179,11 @@ extern int valgrind_thread_alive (unsigned long tid);
    set to the first valid thread. */
 extern void set_desired_inferior (int use_general);
 
-/* Fetch registers from the current_inferior thread.
-   If REGNO is -1, fetch all registers; otherwise, fetch at least REGNO.  */
-extern void valgrind_fetch_registers (int regno);
+/* Fetch register regno from the current_inferior thread and put its value in buf.  */
+extern void valgrind_fetch_register (int regno, unsigned char *buf);
 
-/* Store registers to the current_inferior thread.
-   If REGNO is -1, store all registers; otherwise, store at least REGNO.  */
-extern void valgrind_store_registers (int regno);
+/* Store register REGNO value from BUF to the VEX valgrind state.  */
+extern void valgrind_store_register (int regno, const unsigned char *buf);
 
 
 

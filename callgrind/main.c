@@ -15,7 +15,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -777,7 +777,6 @@ static
 InstrInfo* next_InstrInfo ( ClgState* clgs, UInt instr_size )
 {
    InstrInfo* ii;
-   tl_assert(clgs->ii_index >= 0);
    tl_assert(clgs->ii_index < clgs->bb->instr_count);
    ii = &clgs->bb->instr[ clgs->ii_index ];
 
@@ -1690,6 +1689,9 @@ Bool CLG_(handle_client_request)(ThreadId tid, UWord *args, UWord *ret)
       return handled;
    }
    default:
+      VG_(message)(Vg_UserMsg,
+                   "Warning: unknown callgrind client request code %llx\n",
+                   (ULong)args[0]);
       return False;
    }
 
@@ -1711,7 +1713,7 @@ static
 void collect_time (struct vki_timespec *systime, struct vki_timespec *syscputime)
 {
   switch (CLG_(clo).collect_systime) {
-    case systime_no: tl_assert (0);
+    default: tl_assert (0);
     case systime_msec: {
       UInt ms_timer = VG_(read_millisecond_timer)();
       systime->tv_sec = ms_timer / 1000;

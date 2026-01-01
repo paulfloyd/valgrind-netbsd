@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -51,11 +51,16 @@
                                  // VG_(mk_SysRes_Error)
                                  // VG_(mk_SysRes_Success)
 
-#include "pub_core_syswrap.h"    // VG_(find_fd_recorded_by_fd)
-
 #include "pub_core_options.h"    // VG_(clo_sanity_level)
 
+#if defined(VGO_freebsd)
+#include "pub_core_libcproc.h"   // VG_(sysctlbyname)
+#endif
+
 #include "pub_core_aspacemgr.h"  // self
+#if defined(VGO_darwin)
+#include "pub_core_mach.h"       // macos support
+#endif
 
 
 /* --------------- Implemented in aspacemgr-common.c ---------------*/

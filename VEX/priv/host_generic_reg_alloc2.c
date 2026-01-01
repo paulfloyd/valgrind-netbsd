@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -137,6 +137,7 @@ typedef
 #define INVALID_RREG_NO ((Short)(-1))
 
 #define IS_VALID_VREGNO(_zz) ((_zz) >= 0 && (_zz) < n_vregs)
+#define IS_VALID_UNSIGNED_VREGNO(_zz) ((_zz) < n_vregs)
 #define IS_VALID_RREGNO(_zz) ((_zz) >= 0 && (_zz) < n_rregs)
 
 
@@ -493,7 +494,7 @@ HInstrArray* doRegisterAllocation_v2 (
    rreg_lrs_la = LibVEX_Alloc_inline(rreg_lrs_size * sizeof(RRegLR));
    rreg_lrs_db = NULL; /* we'll create this later */
 
-   /* We'll need to track live range start/end points seperately for
+   /* We'll need to track live range start/end points separately for
       each rreg.  Sigh. */
    vassert(n_rregs > 0);
    rreg_live_after  = LibVEX_Alloc_inline(n_rregs * sizeof(Int));
@@ -1055,8 +1056,8 @@ HInstrArray* doRegisterAllocation_v2 (
          /* Finally, we can do the coalescing.  It's trivial -- merely
             claim vregS's register for vregD. */
          rreg_state[n].vreg = vregD;
-         vassert(IS_VALID_VREGNO(hregIndex(vregD)));
-         vassert(IS_VALID_VREGNO(hregIndex(vregS)));
+         vassert(IS_VALID_UNSIGNED_VREGNO(hregIndex(vregD)));
+         vassert(IS_VALID_UNSIGNED_VREGNO(hregIndex(vregS)));
          vreg_state[hregIndex(vregD)] = toShort(n);
          vreg_state[hregIndex(vregS)] = INVALID_RREG_NO;
 
@@ -1080,7 +1081,7 @@ HInstrArray* doRegisterAllocation_v2 (
          if (rreg_state[j].disp != Bound)
             continue;
          UInt vregno = hregIndex(rreg_state[j].vreg);
-         vassert(IS_VALID_VREGNO(vregno));
+         vassert(IS_VALID_UNSIGNED_VREGNO(vregno));
          if (vreg_lrs[vregno].dead_before <= ii) {
             rreg_state[j].disp = Free;
             rreg_state[j].eq_spill_slot = False;

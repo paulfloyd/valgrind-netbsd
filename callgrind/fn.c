@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -300,7 +300,7 @@ static Bool search_runtime_resolve(obj_node* obj)
 /* Object hash table, fixed */
 static obj_node* obj_table[N_OBJ_ENTRIES];
 
-void CLG_(init_obj_table)()
+void CLG_(init_obj_table)(void)
 {
     Int i;
     for (i = 0; i < N_OBJ_ENTRIES; i++)
@@ -741,7 +741,7 @@ void CLG_(copy_current_fn_array)(fn_array* dst)
   dst->array = current_fn_active.array;
 }
 
-fn_array* CLG_(get_current_fn_array)()
+fn_array* CLG_(get_current_fn_array)(void)
 {
   return &current_fn_active;
 }

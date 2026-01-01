@@ -16,7 +16,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -242,6 +242,36 @@ struct vki_sigaction_base {
 };
 typedef  struct vki_sigaction_base  vki_sigaction_toK_t;
 typedef  struct vki_sigaction_base  vki_sigaction_fromK_t;
+
+//----------------------------------------------------------------------
+// sys/vdso.h
+//----------------------------------------------------------------------
+#define VKI_VDSO_TIMEHANDS_MD                       \
+        vki_uint32_t        th_x86_shift;           \
+        vki_uint32_t        th_x86_hpet_idx;        \
+        vki_uint32_t        th_res[6];
+
+struct vki_bintime32 {
+#if defined(__amd64__)
+        vki_uint32_t        sec;
+#else
+        vki_uint64_t        sec;
+#endif
+        vki_uint32_t        frac[2];
+};
+
+struct vki_vdso_timehands {
+        vki_uint32_t        th_algo;
+        vki_uint32_t        th_gen;
+        vki_uint32_t        th_scale[2];
+        vki_uint32_t        th_offset_count;
+        vki_uint32_t        th_counter_mask;
+        struct vki_bintime32        th_offset;
+        struct vki_bintime32        th_boottime;
+        VKI_VDSO_TIMEHANDS_MD
+};
+
+
 
 #endif // VKI_X86_FREEBSD_H
 

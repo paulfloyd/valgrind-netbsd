@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -97,7 +97,7 @@ const HChar* VG_(name_of_VgSchedReturnCode) ( VgSchedReturnCode retcode )
 
 ThreadState *VG_(get_ThreadState)(ThreadId tid)
 {
-   vg_assert(tid >= 0 && tid < VG_N_THREADS);
+   vg_assert(tid < VG_N_THREADS);
    vg_assert(VG_(threads)[tid].tid == tid);
    return &VG_(threads)[tid];
 }

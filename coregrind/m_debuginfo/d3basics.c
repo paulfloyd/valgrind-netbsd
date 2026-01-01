@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -435,6 +435,37 @@ const HChar* ML_(pp_DW_AT) ( DW_AT attr )
    return "DW_AT_???";
 }
 
+const HChar* ML_(pp_DW_LLE) ( DW_LLE entry )
+{
+   switch (entry) {
+      case DW_LLE_end_of_list: return "DW_LLE_end_of_list";
+      case DW_LLE_base_addressx: return "DW_LLE_base_addressx";
+      case DW_LLE_startx_endx: return "DW_LLE_startx_endx";
+      case DW_LLE_startx_length: return "DW_LLE_startx_length";
+      case DW_LLE_offset_pair: return "DW_LLE_offset_pair";
+      case DW_LLE_default_location: return "DW_LLE_default_location";
+      case DW_LLE_base_address: return "DW_LLE_base_address";
+      case DW_LLE_start_end: return "DW_LLE_start_end";
+      case DW_LLE_start_length: return "DW_LLE_start_length";
+      case DW_LLE_GNU_view_pair: return "DW_LLE_GNU_view_pair";
+   }
+   return "DW_LLE_???";
+}
+
+const HChar* ML_(pp_DW_RLE) ( DW_RLE entry )
+{
+   switch (entry) {
+      case DW_RLE_end_of_list: return "DW_RLE_end_of_list";
+      case DW_RLE_base_addressx: return "DW_RLE_base_addressx";
+      case DW_RLE_startx_endx: return "DW_RLE_startx_endx";
+      case DW_RLE_startx_length: return "DW_RLE_startx_length";
+      case DW_RLE_offset_pair: return "DW_RLE_offset_pair";
+      case DW_RLE_base_address: return "DW_RLE_base_address";
+      case DW_RLE_start_end: return "DW_RLE_start_end";
+      case DW_RLE_start_length: return "DW_RLE_start_length";
+   }
+   return "DW_RLE_???";
+}
 
 /* ------ To do with evaluation of Dwarf expressions ------ */
 
@@ -522,9 +553,12 @@ static Bool get_Dwarf_Reg( /*OUT*/Addr* a, Word regno, const RegSummary* regs )
 #  elif defined(VGP_mips64_linux)
    if (regno == 29) { *a = regs->sp; return True; }
    if (regno == 30) { *a = regs->fp; return True; }
-#  elif defined(VGP_arm64_linux)
+#  elif defined(VGP_arm64_linux)  || defined(VGP_arm64_freebsd)
    if (regno == 31) { *a = regs->sp; return True; }
    if (regno == 29) { *a = regs->fp; return True; }
+#  elif defined(VGP_riscv64_linux)
+   if (regno == 2) { *a = regs->sp; return True; }
+   if (regno == 8) { *a = regs->fp; return True; }
 #  else
 #    error "Unknown platform"
 #  endif
@@ -618,7 +652,6 @@ GXResult ML_(evaluate_Dwarf3_Expr) ( const UChar* expr, UWord exprszB,
 
    sp = -1;
    vg_assert(expr);
-   vg_assert(exprszB >= 0);
    limit = expr + exprszB;
 
    /* Deal with the case where the entire expression is a single
@@ -1018,11 +1051,19 @@ GXResult ML_(evaluate_Dwarf3_Expr) ( const UChar* expr, UWord exprszB,
                FAIL("evaluate_Dwarf3_Expr: DW_OP_stack_value "
                     "does not terminate expression");
             break;
+	 case DW_OP_entry_value:
+	 case DW_OP_GNU_entry_value:
+            /* This provides a DWARF expression where any register op
+               needs tobe evaluated as if the value that register had
+               upon entering the function.  Which is non-trivial to
+               implement.  */
+            FAIL("evaluate_Dwarf3_Expr: Unhandled DW_OP entry_value");
+            return res;
          default:
             if (!VG_(clo_xml))
                VG_(message)(Vg_DebugMsg, 
                             "warning: evaluate_Dwarf3_Expr: unhandled "
-                            "DW_OP_ 0x%x\n", (Int)opcode); 
+                            "DW_OP_ 0x%x\n", (UInt)opcode);
             FAIL("evaluate_Dwarf3_Expr: unhandled DW_OP_");
             /*NOTREACHED*/
       }

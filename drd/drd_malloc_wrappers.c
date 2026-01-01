@@ -5,7 +5,7 @@
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -147,7 +147,7 @@ static void* drd_malloc(ThreadId tid, SizeT n)
 }
 
 /** Wrapper for memalign(). */
-static void* drd_memalign(ThreadId tid, SizeT align, SizeT n)
+static void* drd_memalign(ThreadId tid, SizeT align, SizeT orig_alignT, SizeT n)
 {
    return new_block(tid, n, align, /*is_zeroed*/False);
 }
@@ -184,8 +184,12 @@ static void* drd_realloc(ThreadId tid, void* p_old, SizeT new_size)
 
    if (new_size == 0)
    {
-      drd_free(tid, p_old);
-      return NULL;
+      if (VG_(clo_realloc_zero_bytes_frees) == True)
+      {
+         drd_free(tid, p_old);
+         return NULL;
+      }
+      new_size = 1;
    }
 
    s_cmalloc_n_mallocs++;
@@ -254,7 +258,7 @@ static void* drd___builtin_new(ThreadId tid, SizeT n)
 }
 
 /** Wrapper for __builtin_new_aligned(). */
-static void* drd___builtin_new_aligned(ThreadId tid, SizeT n, SizeT align)
+static void* drd___builtin_new_aligned(ThreadId tid, SizeT n, SizeT align, SizeT orig_align)
 {
    return new_block(tid, n, align, /*is_zeroed*/False);
 }
@@ -278,7 +282,7 @@ static void* drd___builtin_vec_new(ThreadId tid, SizeT n)
 }
 
 /** Wrapper for __builtin_vec_new_aligned(). */
-static void* drd___builtin_vec_new_aligned(ThreadId tid, SizeT n, SizeT align)
+static void* drd___builtin_vec_new_aligned(ThreadId tid, SizeT n, SizeT align, SizeT orig_align)
 {
    return new_block(tid, n, align, /*is_zeroed*/False);
 }

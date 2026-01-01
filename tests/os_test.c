@@ -25,6 +25,7 @@ char* all_OSes[] = {
    "darwin",
    "solaris",
    "freebsd",
+   "illumos",
    "netbsd",
    NULL
 };
@@ -67,6 +68,7 @@ static Bool go(char* OS, char *min_version)
 
 #elif defined(VGO_solaris)
    if ( 0 == strcmp( OS, "solaris" ) ) return True;
+   if ( 0 == strcmp( OS, "illumos" ) ) return True;
 
 #elif defined(VGO_freebsd)
    if ( 0 == strcmp( OS, "freebsd" ) ) return True;

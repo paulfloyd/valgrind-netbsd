@@ -1,6 +1,6 @@
 
 /*--------------------------------------------------------------------*/
-/*--- Demangling of C++ mangled names.                  demangle.c ---*/
+/*--- Demangling of decorated names.                    demangle.c ---*/
 /*--------------------------------------------------------------------*/
 
 /*
@@ -16,7 +16,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -41,6 +41,7 @@
 #include "vg_libciface.h"
 #include "demangle.h"
 
+Bool VG_(lang_is_ada) = False;
 
 /*------------------------------------------------------------*/
 /*---                                                      ---*/
@@ -121,10 +122,12 @@ void VG_(demangle) ( Bool do_cxx_demangling, Bool do_z_demangling,
    // - C++ mangled symbols start with "_Z" (possibly with exceptions?)
    // - Rust "legacy" mangled symbols start with "_Z".
    // - Rust "v0" mangled symbols start with "_R".
-   // XXX: the Java/Rust/Ada demangling here probably doesn't work. See
-   // https://bugs.kde.org/show_bug.cgi?id=445235 for details.
+   // - D programming language mangled symbols start with "_D".
+   // - Ada mangled symbols depend on the entity the symbol represents.
+   //   See ada_demangle for details.
    if (do_cxx_demangling && VG_(clo_demangle)
-       && orig != NULL && orig[0] == '_' && (orig[1] == 'Z' || orig[1] == 'R')) {
+       && orig != NULL && (VG_(lang_is_ada) ||
+      (orig[0] == '_' && (orig[1] == 'Z' || orig[1] == 'R' || orig[1] == 'D')))) {
       /* !!! vvv STATIC vvv !!! */
       static HChar* demangled = NULL;
       /* !!! ^^^ STATIC ^^^ !!! */
@@ -134,7 +137,13 @@ void VG_(demangle) ( Bool do_cxx_demangling, Bool do_z_demangling,
          VG_(arena_free) (VG_AR_DEMANGLE, demangled);
          demangled = NULL;
       }
-      demangled = ML_(cplus_demangle) ( orig, DMGL_ANSI | DMGL_PARAMS );
+      if (orig[1] == 'D') {
+        demangled = dlang_demangle ( orig, DMGL_ANSI | DMGL_PARAMS );
+      } else if (VG_(lang_is_ada)) {
+         demangled = ada_demangle(orig, 0);
+      } else {
+        demangled = ML_(cplus_demangle) ( orig, DMGL_ANSI | DMGL_PARAMS );
+      }
 
       *result = (demangled == NULL) ? orig : demangled;
    } else {

@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -65,11 +65,10 @@ Bool VG_(generic_match) (
    Bool  havePatt, haveInput;
    const HChar *currPatt, *currInput;
   tailcall:
-   vg_assert(nPatt >= 0 && nPatt  < 1000000); /* arbitrary */
-   vg_assert(inputCompleter
-             || (nInput >= 0  && nInput < 1000000)); /* arbitrary */
-   vg_assert(ixPatt >= 0  && ixPatt <= nPatt);
-   vg_assert(ixInput >= 0 && (inputCompleter || ixInput <= nInput));
+   vg_assert(nPatt  < 1000000); /* arbitrary */
+   vg_assert(inputCompleter || (nInput < 1000000)); /* arbitrary */
+   vg_assert(ixPatt <= nPatt);
+   vg_assert(inputCompleter || ixInput <= nInput);
 
    havePatt  = ixPatt < nPatt;
    haveInput = inputCompleter ? 

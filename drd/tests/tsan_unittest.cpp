@@ -7,7 +7,7 @@
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -4399,7 +4399,7 @@ Mutex   MU;
 
 void Publisher() {
   MU.Lock();
-  posix_memalign(reinterpret_cast<void**>(&GLOB), 64, sizeof(int));
+  GLOB = (int*)memalign(64, sizeof(int));
   *GLOB = 777;
   if (!Tsan_PureHappensBefore() && !Tsan_FastMode())
     ANNOTATE_EXPECT_RACE_FOR_TSAN(GLOB, "test90. FP. This is a false positve");
@@ -4446,7 +4446,7 @@ Mutex   MU, MU1, MU2;
 
 void Publisher() {
   MU1.Lock();
-  posix_memalign(reinterpret_cast<void**>(&GLOB), 64, sizeof(int));
+  GLOB = (int*)memalign(64, sizeof(int));
   *GLOB = 777;
   if (!Tsan_PureHappensBefore() && !Tsan_FastMode())
     ANNOTATE_EXPECT_RACE_FOR_TSAN(GLOB, "test91. FP. This is a false positve");
@@ -5033,7 +5033,7 @@ void Parent() {
   t.Join();
 }
 void Run() {
-  posix_memalign(reinterpret_cast<void**>(&GLOB), 64, sizeof(int));
+  GLOB = (int*)memalign(64, sizeof(int));
   *GLOB = 0;
   ANNOTATE_EXPECT_RACE(GLOB, "test104. TP.");
   ANNOTATE_TRACE_MEMORY(GLOB);

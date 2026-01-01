@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -1056,6 +1056,7 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
    UShort ver;
 
    UChar    addr_size = 0;
+   UChar    unit_type = 0;
    DiCursor p = unitblock_img;
    DiCursor end_img;
    DiCursor abbrev_img;
@@ -1073,7 +1074,7 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
 
    if (ver >= 5)
       /* unit_type for DWARF5 */
-      /* unit_type = */ ML_(cur_step_UChar)(&p);
+      unit_type = ML_(cur_step_UChar)(&p);
    else
       /* get offset in abbrev */
       atoffs = ui->dw64 ? ML_(cur_step_ULong)(&p)
@@ -1082,10 +1083,32 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
    /* Address size */
    addr_size = ML_(cur_step_UChar)(&p);
 
-   if (ver >= 5)
+   if (ver >= 5) {
       /* get offset in abbrev */
       atoffs = ui->dw64 ? ML_(cur_step_ULong)(&p)
                         : (ULong)(ML_(cur_step_UInt)(&p));
+
+      /* read any extra fields */
+      switch(unit_type) {
+         case DW_UT_compile:
+         case DW_UT_partial:
+            break;
+         case DW_UT_skeleton:
+         case DW_UT_split_compile:
+            /* dwo_id = */ ML_(cur_step_ULong)(&p);
+            break;
+         case DW_UT_type:
+         case DW_UT_split_type:
+            /* type_signature = */ ML_(cur_step_ULong)(&p);
+            /* type_offset = */ ui->dw64 ? ML_(cur_step_ULong)(&p)
+                                         : (ULong)(ML_(cur_step_UInt)(&p));
+            break;
+         default:
+            VG_(printf)( "### unhandled dwarf2 unit_type code 0x%x\n",
+                         unit_type );
+            break;
+      }
+   }
 
    /* End of this block */
    end_img = ML_(cur_plus)(unitblock_img, blklen + (ui->dw64 ? 12 : 4)); 
@@ -1113,7 +1136,8 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
 
       tag = step_leb128U( &abbrev_img );
 
-      if ( tag != 0x0011 /*TAG_compile_unit*/ )
+      if ( tag != 0x0011 /*TAG_compile_unit*/
+           && tag != 0x004a /*TAG_skeleton_unit*/ )
          return; /* Not a compile unit (might be partial) or broken DWARF. */
 
       /* DW_CHILDREN_yes or DW_CHILDREN_no */
@@ -1248,8 +1272,44 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
                break;
             case 0x19: /* FORM_flag_present */
                break;
+            case 0x1a: /* FORM_strx */
+               (void)step_leb128U(&p);
+               break;
+            case 0x1b: /* FORM_addrx */
+               (void)step_leb128U(&p);
+               break;
             case 0x20: /* FORM_ref_sig8 */
                p = ML_(cur_plus)(p, 8);
+               break;
+            case 0x22: /* FORM_loclistx */
+               (void)step_leb128U(&p);
+               break;
+            case 0x23: /* FORM_rnglistx */
+               (void)step_leb128U(&p);
+               break;
+            case 0x25: /* FORM_strx1 */
+               p = ML_(cur_plus)(p, 1);
+               break;
+            case 0x26: /* FORM_strx2 */
+               p = ML_(cur_plus)(p, 2);
+               break;
+            case 0x27: /* FORM_strx3 */
+               p = ML_(cur_plus)(p, 3);
+               break;
+            case 0x28: /* FORM_strx4 */
+               p = ML_(cur_plus)(p, 4);
+               break;
+            case 0x29: /* FORM_addrx1 */
+               p = ML_(cur_plus)(p, 1);
+               break;
+            case 0x2a: /* FORM_addrx2 */
+               p = ML_(cur_plus)(p, 2);
+               break;
+            case 0x2b: /* FORM_addrx3 */
+               p = ML_(cur_plus)(p, 3);
+               break;
+            case 0x2c: /* FORM_addrx4 */
+               p = ML_(cur_plus)(p, 4);
                break;
             case 0x1f20: /* FORM_GNU_ref_alt */
                p = ML_(cur_plus)(p, ui->dw64 ? 8 : 4);
@@ -1271,7 +1331,8 @@ void read_unitinfo_dwarf2( /*OUT*/UnitInfo* ui,
          }
          
          /* Now store the members we need in the UnitInfo structure */
-         if ( tag == 0x0011 /*TAG_compile_unit*/ ) {
+         if ( tag == 0x0011 /*TAG_compile_unit*/
+              || tag == 0x004a /*TAG_skeleton_unit*/ ) {
                  if ( name == 0x03 ) ui->name = sval;      /* DW_AT_name */
             else if ( name == 0x1b ) ui->compdir = sval;   /* DW_AT_compdir */
             else if ( name == 0x10 ) ui->stmt_list = cval; /* DW_AT_stmt_list */
@@ -1981,7 +2042,7 @@ void ML_(read_debuginfo_dwarf1) (
 #  define FP_REG         12
 #  define SP_REG         13
 #  define RA_REG_DEFAULT 14
-#elif defined(VGP_arm64_linux)
+#elif defined(VGP_arm64_linux) || defined(VGP_arm64_freebsd)
 #  define FP_REG         29
 #  define SP_REG         31
 #  define RA_REG_DEFAULT 30
@@ -2005,6 +2066,10 @@ void ML_(read_debuginfo_dwarf1) (
 #  define FP_REG         30
 #  define SP_REG         29
 #  define RA_REG_DEFAULT 31
+#elif defined(VGP_riscv64_linux)
+#  define FP_REG         8
+#  define SP_REG         2
+#  define RA_REG_DEFAULT 1
 #else
 #  error "Unknown platform"
 #endif
@@ -2019,10 +2084,12 @@ void ML_(read_debuginfo_dwarf1) (
 # define N_CFI_REGS 72
 #elif defined(VGP_arm_linux)
 # define N_CFI_REGS 320
-#elif defined(VGP_arm64_linux)
+#elif defined(VGP_arm64_linux) || defined(VGP_arm64_freebsd)
 # define N_CFI_REGS 128
 #elif defined(VGP_s390x_linux)
 # define N_CFI_REGS 66
+#elif defined(VGP_riscv64_linux)
+# define N_CFI_REGS 128
 #else
 # define N_CFI_REGS 20
 #endif
@@ -2249,6 +2316,10 @@ static void initUnwindContext ( /*OUT*/UnwindContext* ctx )
          start out as RR_Same. */
       ctx->state[j].reg[29/*FP*/].tag = RR_Same;
       ctx->state[j].reg[30/*LR*/].tag = RR_Same;
+#     elif defined(VGA_riscv64)
+      /* Registers fp and ra start out implicitly as RR_Same. */
+      ctx->state[j].reg[FP_REG].tag = RR_Same;
+      ctx->state[j].reg[RA_REG_DEFAULT].tag = RR_Same;
 #     endif
    }
 }
@@ -2295,9 +2366,10 @@ static Bool summarise_context(/*OUT*/Addr* base,
    *len = 0;
    VG_(bzero_inline)(si_m, sizeof(*si_m));
 
-   /*const*/ Bool is_s390x_linux = False;
 #  if defined(VGP_s390x_linux)
-   is_s390x_linux = True;
+   #define is_s390x_linux True
+#  else
+   #define is_s390x_linux False
 #  endif
 
    /* Guard against obviously stupid settings of the reg-rule stack
@@ -2331,7 +2403,8 @@ static Bool summarise_context(/*OUT*/Addr* base,
    if (ctxs->cfa_is_regoff && ctxs->cfa_reg == SP_REG) {
       si_m->cfa_off = ctxs->cfa_off;
 #     if defined(VGA_x86) || defined(VGA_amd64) || defined(VGA_s390x) \
-         || defined(VGA_mips32) || defined(VGA_nanomips) || defined(VGA_mips64)
+         || defined(VGA_mips32) || defined(VGA_nanomips) \
+         || defined(VGA_mips64) || defined(VGA_riscv64)
       si_m->cfa_how = CFIC_IA_SPREL;
 #     elif defined(VGA_arm)
       si_m->cfa_how = CFIC_ARM_R13REL;
@@ -2345,7 +2418,8 @@ static Bool summarise_context(/*OUT*/Addr* base,
    if (ctxs->cfa_is_regoff && ctxs->cfa_reg == FP_REG) {
       si_m->cfa_off = ctxs->cfa_off;
 #     if defined(VGA_x86) || defined(VGA_amd64) || defined(VGA_s390x) \
-         || defined(VGA_mips32) || defined(VGA_nanomips) || defined(VGA_mips64)
+         || defined(VGA_mips32) || defined(VGA_nanomips) \
+         || defined(VGA_mips64) || defined(VGA_riscv64)
       si_m->cfa_how = CFIC_IA_BPREL;
 #     elif defined(VGA_arm)
       si_m->cfa_how = CFIC_ARM_R12REL;
@@ -2725,6 +2799,30 @@ static Bool summarise_context(/*OUT*/Addr* base,
 #  elif defined(VGA_ppc32) || defined(VGA_ppc64be) || defined(VGA_ppc64le)
    /* These don't use CFI based unwinding (is that really true?) */
 
+#  elif defined(VGA_riscv64)
+
+   /* --- entire tail of this fn specialised for riscv64 --- */
+
+   SUMMARISE_HOW(si_m->ra_how, si_m->ra_off, ctxs->reg[ctx->ra_reg]);
+   SUMMARISE_HOW(si_m->fp_how, si_m->fp_off, ctxs->reg[FP_REG]);
+
+   /* on riscv64, it seems the old sp value before the call is always
+      the same as the CFA.  Therefore ... */
+   si_m->sp_how = CFIR_CFAREL;
+   si_m->sp_off = 0;
+
+   /* bogus looking range?  Note, we require that the difference is
+      representable in 32 bits. */
+   if (loc_start >= ctx->loc)
+      { why = 4; goto failed; }
+   if (ctx->loc - loc_start > 10000000 /* let's say */)
+      { why = 5; goto failed; }
+
+   *base = loc_start + ctx->initloc;
+   *len  = (UInt)(ctx->loc - loc_start);
+
+   return True;
+
 #  else
 #    error "Unknown arch"
 #  endif
@@ -2823,7 +2921,7 @@ static Int copy_convert_CfiExpr_tree ( XArray*        dstxa,
          if (dwreg == srcuc->ra_reg)
             return ML_(CfiExpr_CfiReg)( dstxa, Creg_ARM64_X30 );
 #        elif defined(VGA_ppc32) || defined(VGA_ppc64be) \
-            || defined(VGA_ppc64le)
+            || defined(VGA_ppc64le) || defined(VGA_riscv64)
 #        else
 #           error "Unknown arch"
 #        endif
@@ -3104,6 +3202,20 @@ static Int dwarfexpr_to_dag ( const UnwindContext* ctx,
                VG_(printf)("DW_OP_breg%d: %ld", reg, sw);
             break;
 
+         case DW_OP_bregx:
+            /* push: reg + sleb128 */
+            reg = (Int)step_leb128U( &expr );
+            sw = step_leb128S( &expr );
+            ix = ML_(CfiExpr_Binop)( dst,
+                    Cbinop_Add,
+                    ML_(CfiExpr_DwReg)( dst, reg ),
+                    ML_(CfiExpr_Const)( dst, (UWord)sw )
+                 );
+            PUSH(ix);
+            if (ddump_frames)
+               VG_(printf)("DW_OP_bregx: %d %ld", reg, sw);
+            break;
+
          case DW_OP_reg0 ... DW_OP_reg31:
             /* push: reg */
             reg = (Int)opcode - (Int)DW_OP_reg0;
@@ -3122,6 +3234,21 @@ static Int dwarfexpr_to_dag ( const UnwindContext* ctx,
             PUSH( ML_(CfiExpr_Binop)( dst, Cbinop_Add, ix2, ix ) );
             if (ddump_frames)
                VG_(printf)("DW_OP_plus_uconst: %lu", uw);
+            break;
+
+         case DW_OP_consts:
+            sw = step_leb128S( &expr );
+            PUSH( ML_(CfiExpr_Const)( dst, (UWord)sw ) );
+            if (ddump_frames)
+               VG_(printf)("DW_OP_consts: %ld", sw);
+            break;
+
+         case DW_OP_const8s:
+            /* push: 64-bit signed immediate */
+            sw = step_le_s_encoded_literal( &expr, 8 );
+            PUSH( ML_(CfiExpr_Const)( dst, (UWord)sw ) );
+            if (ddump_frames)
+               VG_(printf)("DW_OP_const8s: %ld", sw);
             break;
 
          case DW_OP_const4s:
@@ -3170,6 +3297,21 @@ static Int dwarfexpr_to_dag ( const UnwindContext* ctx,
             PUSH( ML_(CfiExpr_Const)( dst, uw ) );
             if (ddump_frames)
                VG_(printf)("DW_OP_const4: %lu", uw);
+            break;
+
+         case DW_OP_const8u:
+            /* push: 64-bit unsigned immediate */
+            uw = step_le_u_encoded_literal( &expr, 8 );
+            PUSH( ML_(CfiExpr_Const)( dst, uw ) );
+            if (ddump_frames)
+               VG_(printf)("DW_OP_const8: %lu", uw);
+            break;
+
+         case DW_OP_constu:
+            uw = step_leb128S ( &expr );
+            PUSH( ML_(CfiExpr_Const)( dst, uw ) );
+            if (ddump_frames)
+               VG_(printf)("DW_OP_constu: %lu", uw);
             break;
 
          case DW_OP_abs:
@@ -3234,7 +3376,7 @@ static Int dwarfexpr_to_dag ( const UnwindContext* ctx,
             if (!VG_(clo_xml))
                VG_(message)(Vg_DebugMsg, 
                             "Warning: DWARF2 CFI reader: unhandled DW_OP_ "
-                            "opcode 0x%x\n", (Int)opcode); 
+                            "opcode 0x%x\n", (UInt)opcode);
             return -1;
       }
 

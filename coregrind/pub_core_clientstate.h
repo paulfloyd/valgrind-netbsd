@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -37,7 +37,6 @@
 //--------------------------------------------------------------------
 
 #include "pub_tool_clientstate.h"
-#include "pub_core_vki.h" // struct vki_rlimit
 
 // Address space globals
 
@@ -99,6 +98,9 @@ extern Addr VG_(client_freeres_wrapper);
    VG_(get_StackTrace) in m_stacktrace.c for further info. */
 extern Addr VG_(client__dl_sysinfo_int80);
 
+/* Get the maximum client stacksize. */
+extern SizeT VG_(get_client_stack_max_size)(void);
+
 /* Obtains the initial client stack pointer from the finalised image info. */
 extern Addr VG_(get_initial_client_SP)(void);
 
@@ -119,11 +121,17 @@ extern Addr VG_(get_initial_client_SP)(void);
    It would be much cleaner to have a documented and supported
    way to disable the pthread stack cache. */
 extern SizeT* VG_(client__stack_cache_actsize__addr);
+typedef const HChar* (*client__gnu_get_libc_version_type)(void);
+extern client__gnu_get_libc_version_type VG_(client__gnu_get_libc_version_addr);
 
 #if defined(VGO_solaris)
 /* Address of variable vg_vfork_fildes in vgpreload_core.so.0
    (vg_preloaded.c). */
 extern Int* VG_(vfork_fildes_addr);
+#endif
+
+#if defined(VGO_freebsd)
+extern Bool VG_(have_slash_proc);
 #endif
 
 #endif   // __PUB_CORE_CLIENTSTATE_H

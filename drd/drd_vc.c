@@ -5,7 +5,7 @@
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -67,10 +67,10 @@ void DRD_(vc_cleanup)(VectorClock* const vc)
    DRD_(vc_reserve)(vc, 0);
 }
 
-/** Copy constructor -- initializes *new. */
-void DRD_(vc_copy)(VectorClock* const new, const VectorClock* const rhs)
+/** Copy constructor -- initializes *obj. */
+void DRD_(vc_copy)(VectorClock* const obj, const VectorClock* const rhs)
 {
-   DRD_(vc_init)(new, rhs->vc, rhs->size);
+   DRD_(vc_init)(obj, rhs->vc, rhs->size);
 }
 
 /** Assignment operator -- *lhs is already a valid vector clock. */

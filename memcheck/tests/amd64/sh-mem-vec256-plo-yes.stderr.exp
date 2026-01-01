@@ -1,4 +1,3 @@
-
 sh-mem-vec256: config: little-endian, 64-bit word size
 
 19543   109   126    31   206    54   112    34   102   152   335     1    36     0    23    33 
@@ -28,15 +27,13 @@ Expect 2 x error
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes before a block of size 80,000 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 Invalid write of size 8
    ...
  Address 0x........ is 1 bytes before a block of size 80,000 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -47,15 +44,13 @@ Expect 2 x error
 Invalid read of size 32
    ...
  Address 0x........ is 79,969 bytes inside a block of size 80,000 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 Invalid write of size 8
    ...
  Address 0x........ is 79,993 bytes inside a block of size 80,000 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -352,8 +347,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -368,8 +362,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -384,8 +377,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -400,8 +392,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -416,8 +407,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -432,8 +422,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -448,8 +437,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -464,8 +452,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -480,8 +467,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -496,8 +482,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -512,8 +497,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -528,8 +512,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -544,8 +527,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -560,8 +542,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -576,8 +557,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -592,8 +572,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -608,8 +587,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -624,8 +602,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -640,8 +617,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -656,8 +632,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -672,8 +647,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -688,8 +662,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -704,8 +677,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -720,8 +692,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -736,8 +707,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -752,8 +722,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -768,8 +737,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -784,8 +752,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -800,8 +767,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -816,8 +782,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -832,8 +797,7 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
@@ -848,21 +812,10 @@ Conditional jump or move depends on uninitialised value(s)
 Invalid read of size 32
    ...
  Address 0x........ is 1 bytes inside a block of size 64 alloc'd
-   at 0x........: memalign (vg_replace_malloc.c:...)
-   by 0x........: posix_memalign (vg_replace_malloc.c:...)
+   at 0x........: posix_memalign (vg_replace_malloc.c:...)
    ...
 
 
 dddddddddddddddddddddddddddddddd
 
 
-
-HEAP SUMMARY:
-    in use at exit: 0 bytes in 0 blocks
-  total heap usage: 65 allocs, 65 frees, 84,096 bytes allocated
-
-For a detailed leak analysis, rerun with: --leak-check=full
-
-Use --track-origins=yes to see where uninitialised values come from
-For lists of detected and suppressed errors, rerun with: -s
-ERROR SUMMARY: 99 errors from 99 contexts (suppressed: 0 from 0)

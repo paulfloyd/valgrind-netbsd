@@ -19,7 +19,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -1536,37 +1536,32 @@ static ULong DEBUG_SnarfLinetab(
    Int                k;
    const UInt         * lt_ptr;
    Int                nfile;
-   Int                nseg;
    union any_size     pnt;
    union any_size     pnt2;
    const struct startend * start;
-   Int                this_seg;
 
    Bool  debug = di->trace_symtab;
    ULong n_lines_read = 0;
 
-   if (debug)
+   if (debug) {
       VG_(umsg)("BEGIN SnarfLineTab linetab=%p size=%d\n", linetab, size);
+   }
 
    /*
     * Now get the important bits.
     */
    pnt.c = linetab;
    nfile = *pnt.s++;
-   nseg  = *pnt.s++;
 
    filetab = pnt.ui;
 
    /*
     * Now count up the number of segments in the file.
     */
-   nseg = 0;
    for (i = 0; i < nfile; i++) {
       pnt2.c = (const HChar *)linetab + filetab[i];
-      nseg += *pnt2.s;
    }
 
-   this_seg = 0;
    for (i = 0; i < nfile; i++) {
       const HChar *fnmstr;
       const HChar *dirstr;
@@ -1604,7 +1599,7 @@ static ULong DEBUG_SnarfLinetab(
       fnmstr = ML_(addStr)(di, fnmstr, k);
       fnmdirstr_ix = ML_(addFnDn) (di, fnmstr, dirstr);
 
-      for (k = 0; k < file_segcount; k++, this_seg++) {
+      for (k = 0; k < file_segcount; k++) {
          Int linecount;
          Int segno;
 
@@ -2363,7 +2358,7 @@ Bool ML_(read_pdb_debug_info)(
          map.rx   = False;
          map.rw   = True;
          VG_(addToXA)(di->fsm.maps, &map);
-         di->fsm.have_rw_map = True;
+         di->fsm.rw_map_count = 1;
 
          di->data_present = True;
          if (di->data_avma == 0) {
@@ -2385,7 +2380,7 @@ Bool ML_(read_pdb_debug_info)(
       }
    }
 
-   if (di->fsm.have_rx_map && di->fsm.have_rw_map && !di->have_dinfo) {
+   if (di->fsm.have_rx_map && di->fsm.rw_map_count && !di->have_dinfo) {
       vg_assert(di->fsm.filename);
       TRACE_SYMTAB("\n");
       TRACE_SYMTAB("------ start PE OBJECT with PDB INFO "

@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -886,7 +886,7 @@ void VG_(make_coredump)(ThreadId tid, const vki_siginfo_t *si,
 	 VG_(snprintf)(filename, filename_size, "%s%s.%d",
 		      basename, coreext, VG_(getpid)());
       else
-	 VG_(snprintf)(filename, filename_size, "%s%s.%d.%d",
+	 VG_(snprintf)(filename, filename_size, "%s%s.%d.%u",
 		      basename, coreext, VG_(getpid)(), seq);
       seq++;
 

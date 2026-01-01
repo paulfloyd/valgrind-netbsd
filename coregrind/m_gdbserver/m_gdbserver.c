@@ -11,7 +11,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -601,11 +601,12 @@ void VG_(gdbserver_prerun_action) (ThreadId tid)
 {
    // Using VG_(clo_vgdb_error) allows the user to control if gdbserver
    // stops after a fork.
-   if (VG_(clo_vgdb_error) == 0
-       || VgdbStopAtiS(VgdbStopAt_Startup, VG_(clo_vgdb_stop_at))) {
+   if ((VG_(clo_vgdb_error) == 0
+        || (VgdbStopAtiS(VgdbStopAt_Startup, VG_(clo_vgdb_stop_at))))) {
       /* The below call allows gdb to attach at startup
          before the first guest instruction is executed. */
-      VG_(umsg)("(action at startup) vgdb me ... \n");
+      if (!(VG_(clo_launched_with_multi)))
+         VG_(umsg)("(action at startup) vgdb me ... \n");
       VG_(gdbserver)(tid);
    } else {
       /* User has activated gdbserver => initialize now the FIFOs
@@ -974,7 +975,8 @@ void VG_(gdbserver_report_fatal_signal) (const vki_siginfo_t *info,
       return;
    }
 
-   VG_(umsg)("(action on fatal signal) vgdb me ... \n");
+   if (!(VG_(clo_launched_with_multi)))
+      VG_(umsg)("(action on fatal signal) vgdb me ... \n");
 
    /* indicate to gdbserver that there is a signal */
    gdbserver_signal_encountered (info);

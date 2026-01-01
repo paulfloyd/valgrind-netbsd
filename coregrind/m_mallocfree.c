@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -37,6 +37,7 @@
 #include "pub_core_mallocfree.h"
 #include "pub_core_options.h"
 #include "pub_core_threadstate.h"   // For VG_INVALID_THREADID
+#include "pub_core_syscall.h"       // For VG_(strerror)
 #include "pub_core_gdbserver.h"
 #include "pub_core_transtab.h"
 #include "pub_core_tooliface.h"
@@ -749,7 +750,7 @@ void ensure_mm_init ( ArenaId aid )
 /*------------------------------------------------------------*/
 
 __attribute__((noreturn))
-void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB )
+void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB, UWord err )
 {
    static Int outputTrial = 0;
    // We try once to output the full memory state followed by the below message.
@@ -760,7 +761,7 @@ void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB )
    ULong tot_alloc = VG_(am_get_anonsize_total)();
    const HChar* s1 = 
       "\n"
-      "    Valgrind's memory management: out of memory:\n"
+      "    Valgrind's memory management: out of memory: %s\n"
       "       %s's request for %llu bytes failed.\n"
       "       %'13llu bytes have already been mmap-ed ANONYMOUS.\n"
       "    Valgrind cannot continue.  Sorry.\n\n"
@@ -769,6 +770,9 @@ void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB )
       "      output of 'ulimit -a'.  Is there a limit on the size of\n"
       "      virtual memory or address space?\n"
       "    - You have run out of swap space.\n"
+      "    - You have some policy enabled that denies memory to be\n"
+      "      executable (for example selinux deny_execmem) that causes\n"
+      "      mmap to fail with Permission denied.\n"
       "    - Valgrind has a bug.  If you think this is the case or you are\n"
       "    not sure, please let us know and we'll try to fix it.\n"
       "    Please note that programs can take substantially more memory than\n"
@@ -801,9 +805,15 @@ void VG_(out_of_memory_NORETURN) ( const HChar* who, SizeT szB )
          INNER_REQUEST(VALGRIND_MONITOR_COMMAND("v.info memory aspacemgr"));
       }
       outputTrial++;
-      VG_(message)(Vg_UserMsg, s1, who, (ULong)szB, tot_alloc);
+      VG_(message)(Vg_UserMsg, s1,
+		   ((err == 0 || err == VKI_ENOMEM)
+                    ? "" : VG_(strerror) (err)),
+                   who, (ULong)szB, tot_alloc);
    } else {
-      VG_(debugLog)(0,"mallocfree", s1, who, (ULong)szB, tot_alloc);
+      VG_(debugLog)(0,"mallocfree", s1,
+		    ((err == 0 || err == VKI_ENOMEM)
+                     ? "" : VG_(strerror) (err)),
+                    who, (ULong)szB, tot_alloc);
    }
 
    VG_(exit)(1);
@@ -865,7 +875,7 @@ Superblock* newSuperblock ( Arena* a, SizeT cszB )
       // non-client allocation -- abort if it fails
       sres = VG_(am_mmap_anon_float_valgrind)( cszB );
       if (sr_isError(sres)) {
-         VG_(out_of_memory_NORETURN)("newSuperblock", cszB);
+         VG_(out_of_memory_NORETURN)("newSuperblock", cszB, sr_Err(sres));
          /* NOTREACHED */
          sb = NULL; /* keep gcc happy */
       } else {
@@ -908,11 +918,11 @@ void reclaimSuperblock ( Arena* a, Superblock* sb)
    cszB = sizeof(Superblock) + sb->n_payload_bytes;
 
    // removes sb from superblock list.
-   for (i = 0; i < a->sblocks_used; i++) {
+   for (i = 0U; i < a->sblocks_used; i++) {
       if (a->sblocks[i] == sb)
          break;
    }
-   vg_assert(i >= 0 && i < a->sblocks_used);
+   vg_assert(i < a->sblocks_used);
    for (j = i; j < a->sblocks_used; j++)
       a->sblocks[j] = a->sblocks[j+1];
    a->sblocks_used--;
@@ -961,7 +971,7 @@ Superblock* findSb ( Arena* a, Block* b )
       Superblock * sb; 
       SizeT pos = min + (max - min)/2;
 
-      vg_assert(pos >= 0 && pos < a->sblocks_used);
+      vg_assert(pos < a->sblocks_used);
       sb = a->sblocks[pos];
       if ((Block*)&sb->payload_bytes[0] <= b
           && b < (Block*)&sb->payload_bytes[sb->n_payload_bytes])
@@ -991,7 +1001,7 @@ Superblock* maybe_findSb ( Arena* a, Addr ad )
    while (min <= max) {
       Superblock * sb; 
       SizeT pos = min + (max - min)/2;
-      if (pos < 0 || pos >= a->sblocks_used)
+      if (pos >= a->sblocks_used)
          return NULL;
       sb = a->sblocks[pos];
       if ((Addr)&sb->payload_bytes[0] <= ad
@@ -1830,7 +1840,8 @@ void* VG_(arena_malloc) ( ArenaId aid, const HChar* cc, SizeT req_pszB )
                                                      a->sblocks_size * 2);
       if (sr_isError(sres)) {
          VG_(out_of_memory_NORETURN)("arena_init", sizeof(Superblock *) * 
-                                                   a->sblocks_size * 2);
+                                                   a->sblocks_size * 2,
+                                                   sr_Err(sres));
          /* NOTREACHED */
       }
       array = (Superblock**)(Addr)sr_Res(sres);
@@ -2239,12 +2250,26 @@ void* VG_(arena_memalign) ( ArenaId aid, const HChar* cc,
    // Check that the requested alignment has a plausible size.
    // Check that the requested alignment seems reasonable; that is, is
    // a power of 2.
-   if (req_alignB < VG_MIN_MALLOC_SZB
-       || req_alignB > 16 * 1024 * 1024
-       || VG_(log2)( req_alignB ) == -1 /* not a power of 2 */) {
+   if (req_alignB < VG_MIN_MALLOC_SZB) {
       VG_(printf)("VG_(arena_memalign)(%p, %lu, %lu)\n"
                   "bad alignment value %lu\n"
-                  "(it is too small, too big, or not a power of two)",
+                  "(it is too small, below the lower limit of %d)",
+                  a, req_alignB, req_pszB, req_alignB, VG_MIN_MALLOC_SZB );
+      VG_(core_panic)("VG_(arena_memalign)");
+      /*NOTREACHED*/
+   }
+   if (req_alignB > 16 * 1024 * 1024) {
+      VG_(printf)("VG_(arena_memalign)(%p, %lu, %lu)\n"
+                  "bad alignment value %lu\n"
+                  "(it is too big, larger than the upper limit of %d)",
+                  a, req_alignB, req_pszB, req_alignB, 16 * 1024 * 1024 );
+      VG_(core_panic)("VG_(arena_memalign)");
+      /*NOTREACHED*/
+   }
+   if (VG_(log2)( req_alignB ) == -1 /* not a power of 2 */) {
+      VG_(printf)("VG_(arena_memalign)(%p, %lu, %lu)\n"
+                  "bad alignment value %lu\n"
+                  "(it is not a power of two)",
                   a, req_alignB, req_pszB, req_alignB );
       VG_(core_panic)("VG_(arena_memalign)");
       /*NOTREACHED*/
@@ -2347,6 +2372,7 @@ SizeT VG_(arena_malloc_usable_size) ( ArenaId aid, void* ptr )
    return get_pszB(a, b);
 }
 
+#if defined(VGO_linux) || defined(VGO_solaris)
 
 // Implementation of mallinfo(). There is no recent standard that defines
 // the behavior of mallinfo(). The meaning of the fields in struct mallinfo
@@ -2407,6 +2433,44 @@ void VG_(mallinfo) ( ThreadId tid, struct vg_mallinfo* mi )
    mi->fordblks = free_blocks_size + VG_(free_queue_volume);
    mi->keepcost = 0; // may want some value in here
 }
+#endif
+
+#if defined(VGO_linux)
+// The aforementioned older function, mallinfo(), is deprecated since the type
+// used for the fields is too small.
+void VG_(mallinfo2) ( ThreadId tid, struct vg_mallinfo2* mi )
+{
+   UWord  i, free_blocks, free_blocks_size;
+   Arena* a = arenaId_to_ArenaP(VG_AR_CLIENT);
+
+   // Traverse free list and calculate free blocks statistics.
+   // This may seem slow but glibc works the same way.
+   free_blocks_size = free_blocks = 0;
+   for (i = 0; i < N_MALLOC_LISTS; i++) {
+      Block* b = a->freelist[i];
+      if (b == NULL) continue;
+      for (;;) {
+         free_blocks++;
+         free_blocks_size += (UWord)get_pszB(a, b);
+         b = get_next_b(b);
+         if (b == a->freelist[i]) break;
+      }
+   }
+
+   // We don't have fastbins so smblks & fsmblks are always 0. Also we don't
+   // have a separate mmap allocator so set hblks & hblkhd to 0.
+   mi->arena    = a->stats__bytes_mmaped;
+   mi->ordblks  = free_blocks + VG_(free_queue_length);
+   mi->smblks   = 0;
+   mi->hblks    = 0;
+   mi->hblkhd   = 0;
+   mi->usmblks  = 0;
+   mi->fsmblks  = 0;
+   mi->uordblks = a->stats__bytes_on_loan - VG_(free_queue_volume);
+   mi->fordblks = free_blocks_size + VG_(free_queue_volume);
+   mi->keepcost = 0; // may want some value in here
+}
+#endif
 
 SizeT VG_(arena_redzone_size) ( ArenaId aid )
 {

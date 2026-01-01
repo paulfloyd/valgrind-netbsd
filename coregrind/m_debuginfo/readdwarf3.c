@@ -11,10 +11,12 @@
 
    Copyright (C) 2008-2017 OpenWorks LLP
       info@open-works.co.uk
+   Copyright (C) 2025 Mark J. Wielaard
+      mark@klomp.org
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -314,6 +316,25 @@ static Long get_SLEB128 ( Cursor* c ) {
       result |= -(1ULL << shift);
    return result;
 }
+static UInt get_UInt3 ( Cursor* c ) {
+   UChar c1, c2, c3;
+   vg_assert(is_sane_Cursor(c));
+   if (c->sli_next + 3 > c->sli.ioff + c->sli.szB) {
+      c->barf(c->barfstr);
+      /*NOTREACHED*/
+      vg_assert(0);
+   }
+   c1 = ML_(img_get_UChar)(c->sli.img, c->sli_next);
+   c2 = ML_(img_get_UChar)(c->sli.img, c->sli_next+1);
+   c3 = ML_(img_get_UChar)(c->sli.img, c->sli_next+2);
+   c->sli_next += 3;
+#if defined(VG_BIGENDIAN)
+   return c1 << 16 | c2 << 8 | c3;
+#else
+   return c1 | c2 << 8 | c3 << 16;
+#endif
+}
+
 
 /* Assume 'c' points to the start of a string.  Return a DiCursor of
    whatever it points at, and advance it past the terminating zero.
@@ -479,10 +500,24 @@ typedef
       DiSlice escn_debug_info_alt;
       DiSlice escn_debug_str_alt;
       DiSlice escn_debug_line_str;
+      DiSlice escn_debug_addr;
+      DiSlice escn_debug_str_offsets;
       /* How much to add to .debug_types resp. alternate .debug_info offsets
          in cook_die*.  */
       UWord  types_cuOff_bias;
       UWord  alt_cuOff_bias;
+      /* DW_AT_addr_base */
+      Addr   cu_addr_base;
+      Bool   cu_has_addr_base;
+      /* DW_AT_str_offsets_base */
+      Addr   cu_str_offsets_base;
+      Bool   cu_has_str_offsets_base;
+      /* DW_AT_rnglists_base */
+      Addr   cu_rnglists_base;
+      Bool   cu_has_rnglists_base;
+      /* DW_AT_loclists_base */
+      Addr   cu_loclists_base;
+      Bool   cu_has_loclists_base;
       /* --- Needed so we can add stuff to the string table. --- */
       struct _DebugInfo* di;
       /* --- State of the hash table of g_abbv (i.e. parsed abbreviations)
@@ -560,6 +595,55 @@ static UWord uncook_die( const CUConst *cc, UWord die, /*OUT*/Bool *type_flag,
       }
    }
    return die;
+}
+
+/* Return an entry from .debug_addr with the given index.
+   Call one of the variants below that do error-checking. */
+static ULong get_debug_addr_entry_common( ULong index, const CUConst* cc )
+{
+   vg_assert(cc->cu_has_addr_base);
+   /* We make the same word-size assumption as DW_FORM_addr. */
+   UWord addr_pos = cc->cu_addr_base + index * sizeof(UWord);
+   Cursor cur;
+   init_Cursor( &cur, cc->escn_debug_addr, addr_pos, cc->barf,
+                "get_debug_addr_entry_common: index points outside .debug_addr" );
+   return (ULong)(UWord)get_UWord(&cur);
+}
+
+static ULong get_debug_addr_entry_form( ULong index, const CUConst* cc,
+                                        DW_FORM form )
+{
+   if(!cc->cu_has_addr_base) {
+      VG_(printf)(
+         "get_debug_addr_entry_form: %u (%s) without DW_AT_addr_base\n",
+         form, ML_(pp_DW_FORM)(form));
+      cc->barf("get_debug_addr_entry_form: DW_AT_addr_base not set");
+   }
+   return get_debug_addr_entry_common( index, cc );
+}
+
+static ULong get_debug_addr_entry_lle( ULong index, const CUConst* cc,
+                                       DW_LLE entry )
+{
+   if(!cc->cu_has_addr_base) {
+      VG_(printf)(
+         "get_debug_addr_entry_lle: %u (%s) without DW_AT_addr_base\n",
+         entry, ML_(pp_DW_LLE)(entry));
+      cc->barf("get_debug_addr_entry_lle: DW_AT_addr_base not set");
+   }
+   return get_debug_addr_entry_common( index, cc );
+}
+
+static ULong get_debug_addr_entry_rle( ULong index, const CUConst* cc,
+                                       DW_RLE entry )
+{
+   if(!cc->cu_has_addr_base) {
+      VG_(printf)(
+         "get_debug_addr_entry_rle: %u (%s) without DW_AT_addr_base\n",
+         entry, ML_(pp_DW_RLE)(entry));
+      cc->barf("get_debug_addr_entry_rle: DW_AT_addr_base not set");
+   }
+   return get_debug_addr_entry_common( index, cc );
 }
 
 /*------------------------------------------------------------*/
@@ -770,8 +854,22 @@ static GExpr* make_general_GX ( const CUConst* cc,
             get_ULEB128( &loc );
             break;
          case DW_LLE_base_addressx:
+            base = get_debug_addr_entry_lle( get_ULEB128( &loc ), cc,
+                                             DW_LLE_base_addressx );
+            break;
          case DW_LLE_startx_endx:
+            w1 = get_debug_addr_entry_lle( get_ULEB128( &loc ), cc,
+                                           DW_LLE_startx_endx );
+            w2 = get_debug_addr_entry_lle( get_ULEB128( &loc ), cc,
+                                           DW_LLE_startx_endx );
+            len = get_ULEB128( &loc );
+            break;
          case DW_LLE_startx_length:
+            w1 = get_debug_addr_entry_lle( get_ULEB128( &loc ), cc,
+                                           DW_LLE_startx_length );
+            w2 = w1 + get_ULEB128( &loc );
+            len = get_ULEB128( &loc );
+            break;
          case DW_LLE_default_location:
          default:
             cc->barf( "Unhandled or unknown loclists entry" );
@@ -993,8 +1091,20 @@ get_range_list ( const CUConst* cc,
             w2 = get_UWord ( &ranges );
             break;
          case DW_RLE_base_addressx:
+            base = get_debug_addr_entry_rle( get_ULEB128( &ranges ), cc,
+                                             DW_RLE_base_addressx );
+            break;
          case DW_RLE_startx_endx:
+            w1 = get_debug_addr_entry_rle( get_ULEB128( &ranges ), cc,
+                                           DW_RLE_startx_endx );
+            w2 = get_debug_addr_entry_rle( get_ULEB128( &ranges ), cc,
+                                           DW_RLE_startx_endx );
+            break;
          case DW_RLE_startx_length:
+            w1 = get_debug_addr_entry_rle( get_ULEB128( &ranges ), cc,
+                                           DW_RLE_startx_length );
+            w2 = w1 + get_ULEB128( &ranges );
+            break;
          default:
             cc->barf( "Unhandled or unknown range list entry" );
             done = True;
@@ -1200,9 +1310,15 @@ void parse_CU_Header ( /*OUT*/CUConst* cc,
    cc->is_type_unit = type_unit;
    cc->is_alt_info = alt_info;
 
-   if (type_unit || (cc->version >= 5 && unit_type == DW_UT_type)) {
+   if (type_unit || (cc->version >= 5 && (unit_type == DW_UT_type
+                                          || unit_type == DW_UT_split_type))) {
       cc->type_signature = get_ULong( c );
       cc->type_offset = get_Dwarfish_UWord( c, cc->is_dw64 );
+   }
+
+   if (cc->version >= 5 && (unit_type == DW_UT_skeleton
+                            || unit_type == DW_UT_split_compile)) {
+      /* dwo_id = */ get_ULong( c );
    }
 
    /* Set up cc->debug_abbv to point to the relevant table for this
@@ -1288,6 +1404,71 @@ typedef
    }
    FormContents;
 
+// Read data for get_Form_contents() from .debug_addr for the 'index' entry.
+static void get_Form_contents_addr( /*OUT*/FormContents* cts, DW_FORM form,
+                                    ULong index, const CUConst* cc, Bool td3 )
+{
+   cts->u.val = get_debug_addr_entry_form( index, cc, form );
+   cts->szB   = sizeof(UWord);
+   TRACE_D3("0x%lx", (UWord)cts->u.val);
+}
+
+// Read data for get_Form_contents() from .debug_str for the given offset.
+static void get_Form_contents_str( /*OUT*/FormContents* cts, DW_FORM form,
+                                    UWord offset, const CUConst* cc, Bool td3 )
+{
+   if (!ML_(sli_is_valid)(cc->escn_debug_str)
+       || offset >= cc->escn_debug_str.szB) {
+      VG_(printf)(
+         "get_Form_contents_str: %u (%s) points outside .debug_str\n",
+         form, ML_(pp_DW_FORM)(form));
+      cc->barf("get_Form_contents_str: index points outside .debug_str");
+   }
+   /* FIXME: check the entire string lies inside debug_str,
+      not just the first byte of it. */
+   DiCursor str
+      = ML_(cur_plus)( ML_(cur_from_sli)(cc->escn_debug_str), offset );
+   if (TD3) {
+      HChar* tmp = ML_(cur_read_strdup)(str, "di.getFC.1");
+      TRACE_D3("(indirect string, offset: 0x%lx): %s", offset, tmp);
+      ML_(dinfo_free)(tmp);
+   }
+   cts->u.cur = str;
+   cts->szB   = - (Long)(1 + (ULong)ML_(cur_strlen)(str));
+}
+
+static inline UInt sizeof_Dwarfish_UWord (Bool is_dw64)
+{
+   if (is_dw64)
+      return sizeof(ULong);
+   else
+      return sizeof(UInt);
+}
+
+// Read data for get_Form_contents() from .debug_str_offsets for the 'index' entry.
+static void get_Form_contents_str_offsets( /*OUT*/FormContents* cts, DW_FORM form,
+                                    ULong index, const CUConst* cc, Bool td3 )
+{
+   if(!cc->cu_has_str_offsets_base) {
+      VG_(printf)(
+         "get_Form_contents_str_offsets: %u (%s) without DW_AT_str_offsets_base\n",
+         form, ML_(pp_DW_FORM)(form));
+      cc->barf("get_Form_contents_str_offsets: DW_AT_str_offsets_base not set");
+   }
+   UWord str_offsets_pos = cc->cu_str_offsets_base
+                           + index * sizeof_Dwarfish_UWord (cc->is_dw64);
+   Cursor cur;
+   init_Cursor( &cur, cc->escn_debug_str_offsets, str_offsets_pos, cc->barf,
+                "get_Form_contents_str_offsets: index "
+                "points outside .debug_str_offsets" );
+   if (TD3) {
+      HChar* tmp = ML_(cur_read_strdup)(get_DiCursor_from_Cursor(&cur), "di.getFC.1");
+      TRACE_D3("(indirect string offset, offset: 0x%lx): %s", str_offsets_pos, tmp);
+      ML_(dinfo_free)(tmp);
+   }
+   get_Form_contents_str( cts, form, get_Dwarfish_UWord(&cur, cc->is_dw64), cc, td3 );
+}
+
 /* From 'c', get the Form data into 'cts'.  Either it gets a 1/2/4/8
    byte scalar value, or (a reference to) zero or more bytes starting
    at a DiCursor.*/
@@ -1340,6 +1521,40 @@ void get_Form_contents ( /*OUT*/FormContents* cts,
          cts->szB   = cc->is_dw64 ? 8 : 4;
          TRACE_D3("%llu", cts->u.val);
          break;
+      case DW_FORM_rnglistx: {
+         if(!cc->cu_has_rnglists_base) {
+            cc->barf("get_Form_contents: DW_FORM_rnglistsx"
+                     " without DW_AT_rnglists_base");
+         }
+         /* Convert index to offset pointing to the offsets list. */
+         ULong index = get_ULEB128(c);
+         ULong offset_to_offset = cc->cu_rnglists_base + index * sizeof_Dwarfish_UWord( cc->is_dw64 );
+         /* And read the offset value from there. */
+         Cursor cur;
+         init_Cursor( &cur, cc->escn_debug_rnglists, offset_to_offset, cc->barf,
+                      "get_Form_contents: index points outside .debug_rnglists" );
+         cts->u.val = cc->cu_rnglists_base + get_Dwarfish_UWord(&cur, cc->is_dw64);
+         cts->szB   = 8;
+         TRACE_D3("%llu", cts->u.val);
+         break;
+      }
+      case DW_FORM_loclistx: {
+         if(!cc->cu_has_loclists_base) {
+            cc->barf("get_Form_contents: DW_FORM_loclistsx"
+                     " without DW_AT_loclists_base");
+         }
+         /* Convert index to offset pointing to the offsets list. */
+         ULong index = get_ULEB128(c);
+         ULong offset_to_offset = cc->cu_loclists_base + index * sizeof_Dwarfish_UWord( cc->is_dw64 );
+         /* And read the offset value from there. */
+         Cursor cur;
+         init_Cursor( &cur, cc->escn_debug_loclists, offset_to_offset, cc->barf,
+                      "get_Form_contents: index points outside .debug_loclists" );
+         cts->u.val = cc->cu_loclists_base + get_Dwarfish_UWord(&cur, cc->is_dw64);
+         cts->szB   = 8;
+         TRACE_D3("%llu", cts->u.val);
+         break;
+      }
       case DW_FORM_sdata:
          cts->u.val = (ULong)(Long)get_SLEB128(c);
          cts->szB   = 8;
@@ -1403,21 +1618,7 @@ void get_Form_contents ( /*OUT*/FormContents* cts,
       case DW_FORM_strp: {
          /* this is an offset into .debug_str */
          UWord uw = (UWord)get_Dwarfish_UWord( c, cc->is_dw64 );
-         if (!ML_(sli_is_valid)(cc->escn_debug_str)
-             || uw >= cc->escn_debug_str.szB)
-            cc->barf("get_Form_contents: DW_FORM_strp "
-                     "points outside .debug_str");
-         /* FIXME: check the entire string lies inside debug_str,
-            not just the first byte of it. */
-         DiCursor str
-            = ML_(cur_plus)( ML_(cur_from_sli)(cc->escn_debug_str), uw );
-         if (TD3) {
-            HChar* tmp = ML_(cur_read_strdup)(str, "di.getFC.1");
-            TRACE_D3("(indirect string, offset: 0x%lx): %s", uw, tmp);
-            ML_(dinfo_free)(tmp);
-         }
-         cts->u.cur = str;
-         cts->szB   = - (Long)(1 + (ULong)ML_(cur_strlen)(str));
+         get_Form_contents_str( cts, form, uw, cc, td3 );
          break;
       }
       case DW_FORM_line_strp: {
@@ -1648,20 +1849,73 @@ void get_Form_contents ( /*OUT*/FormContents* cts,
          break;
       }
 
+      case DW_FORM_addrx: {
+         /* this is an offset into .debug_addr */
+         ULong index = (ULong)(Long)get_ULEB128(c);
+         get_Form_contents_addr(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_addrx1: {
+         /* this is an offset into .debug_addr */
+         ULong index = (ULong)get_UChar(c);
+         get_Form_contents_addr(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_addrx2: {
+         /* this is an offset into .debug_addr */
+         ULong index = (ULong)get_UShort(c);
+         get_Form_contents_addr(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_addrx3: {
+         /* this is an offset into .debug_addr */
+         ULong index = (ULong)get_UInt3(c);
+         get_Form_contents_addr(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_addrx4: {
+         /* this is an offset into .debug_addr */
+         ULong index = (ULong)get_UInt(c);
+         get_Form_contents_addr(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_strx: {
+         /* this is an offset into .debug_str_offsets */
+         ULong index = (ULong)(Long)get_ULEB128(c);
+         get_Form_contents_str_offsets(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_strx1: {
+         /* this is an offset into .debug_str_offsets */
+         ULong index = get_UChar(c);
+         get_Form_contents_str_offsets(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_strx2: {
+         /* this is an offset into .debug_str_offsets */
+         ULong index = (ULong)get_UShort(c);
+         get_Form_contents_str_offsets(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_strx3: {
+         /* this is an offset into .debug_str_offsets */
+         ULong index = (ULong)get_UInt3(c);
+         get_Form_contents_str_offsets(cts, form, index, cc, td3);
+         break;
+      }
+      case DW_FORM_strx4: {
+         /* this is an offset into .debug_str_offsets */
+         ULong index = (ULong)get_UInt(c);
+         get_Form_contents_str_offsets(cts, form, index, cc, td3);
+         break;
+      }
+
       default:
          VG_(printf)(
             "get_Form_contents: unhandled %u (%s) at <%llx>\n",
             form, ML_(pp_DW_FORM)(form), get_position_of_Cursor(c));
          c->barf("get_Form_contents: unhandled DW_FORM");
    }
-}
-
-static inline UInt sizeof_Dwarfish_UWord (Bool is_dw64)
-{
-   if (is_dw64)
-      return sizeof(ULong);
-   else
-      return sizeof(UInt);
 }
 
 #define VARSZ_FORM 0xffffffff
@@ -1685,6 +1939,9 @@ UInt get_Form_szB (const CUConst* cc, DW_FORM form )
             return 8;
          else
             return 4;
+      case DW_FORM_rnglistx:
+      case DW_FORM_loclistx:
+         return VARSZ_FORM;
       case DW_FORM_sdata:
          return VARSZ_FORM;
       case DW_FORM_udata:
@@ -1734,6 +1991,22 @@ UInt get_Form_szB (const CUConst* cc, DW_FORM form )
          return sizeof_Dwarfish_UWord(cc->is_dw64);
       case DW_FORM_implicit_const:
 	 return 0; /* Value inside abbrev. */
+      case DW_FORM_addrx:
+         return VARSZ_FORM;
+      case DW_FORM_strx:
+         return VARSZ_FORM;
+      case DW_FORM_addrx1:
+      case DW_FORM_strx1:
+         return 1;
+      case DW_FORM_addrx2:
+      case DW_FORM_strx2:
+         return 2;
+      case DW_FORM_addrx3:
+      case DW_FORM_strx3:
+         return 3;
+      case DW_FORM_addrx4:
+      case DW_FORM_strx4:
+         return 4;
       default:
          VG_(printf)(
             "get_Form_szB: unhandled %u (%s)\n",
@@ -1761,8 +2034,15 @@ void skip_DIE (UWord  *sibling,
             *sibling = cts.u.val;
          nf_i++;
       } else if (abbv->nf[nf_i].skip_szB == VARSZ_FORM) {
-         get_Form_contents( &cts, cc, c_die, False /*td3*/,
-                            &abbv->nf[nf_i] );
+         DW_FORM form = abbv->nf[nf_i].at_form;
+         if(form == DW_FORM_addrx || form == DW_FORM_strx
+            || form == DW_FORM_rnglistx || form == DW_FORM_loclistx) {
+            /* Skip without interpreting them, they may depend on e.g.
+               DW_AT_addr_base that has not been read yet. */
+            (void) get_ULEB128(c_die);
+         } else
+            get_Form_contents( &cts, cc, c_die, False /*td3*/,
+                               &abbv->nf[nf_i] );
          nf_i++;
       } else {
          advance_position_of_Cursor (c_die, (ULong)abbv->nf[nf_i].skip_szB);
@@ -2316,8 +2596,7 @@ void read_filename_table( /*MOD*/XArray* /* of UInt* */ fndn_ix_Table,
          DiCursor cur = get_AsciiZ(&c);
          str = ML_(addStrFromCursor)( cc->di, cur );
          dir_xa_ix = get_ULEB128( &c );
-         if (dirname_xa != NULL
-             && dir_xa_ix >= 0 && dir_xa_ix < VG_(sizeXA) (dirname_xa))
+         if (dirname_xa != NULL && dir_xa_ix < VG_(sizeXA) (dirname_xa))
             dirname = *(HChar**)VG_(indexXA) ( dirname_xa, dir_xa_ix );
          else
             dirname = NULL;
@@ -2424,6 +2703,88 @@ static void setup_cu_svma(CUConst* cc, Bool have_lo, Addr ip_lo, Bool td3)
       if (0)
          TRACE_D3("setup_cu_svma: acquire CU_SVMA of %p\n", (void*) cc->cu_svma);
    }
+}
+
+/* Setup info from DW_AT_addr_base, DW_AT_str_offsets_base, DW_AT_rnglists_base
+   and DW_AT_loclists_base. This needs to be done early, because other DW_AT_*
+   info may depend on it. */
+static void setup_cu_bases(CUConst* cc, Cursor* c_die, const g_abbv* abbv)
+{
+   FormContents cts;
+   UInt nf_i;
+   ULong saved_c_pos;
+   if(cc->cu_has_addr_base && cc->cu_has_str_offsets_base
+      && cc->cu_has_rnglists_base && cc->cu_has_loclists_base)
+      return;
+   saved_c_pos = get_position_of_Cursor(c_die);
+   nf_i = 0;
+   while (!cc->cu_has_addr_base || !cc->cu_has_str_offsets_base
+      || !cc->cu_has_rnglists_base || !cc->cu_has_loclists_base) {
+      DW_AT   attr = (DW_AT)  abbv->nf[nf_i].at_name;
+      DW_FORM form = (DW_FORM)abbv->nf[nf_i].at_form;
+      const name_form *nf = &abbv->nf[nf_i];
+      if (attr == 0 && form == 0)
+         break;
+      if (attr != DW_AT_addr_base && attr != DW_AT_str_offsets_base
+          && attr != DW_AT_rnglists_base && attr != DW_AT_loclists_base) {
+         const UInt form_szB = get_Form_szB (cc, form);
+         if (form_szB == VARSZ_FORM) {
+            if(form == DW_FORM_addrx || form == DW_FORM_strx
+               || form == DW_FORM_rnglistx || form == DW_FORM_loclistx) {
+               /* Skip without interpreting them, they depend on *_base. */
+               (void) get_ULEB128(c_die);
+            } else {
+               /* Need to read the contents of this one to skip it. */
+               get_Form_contents( &cts, cc, c_die, False /*td3*/,
+                                  &abbv->nf[nf_i] );
+            }
+         } else {
+            /* Skip without even reading it, as it may depend on *_base. */
+            advance_position_of_Cursor (c_die, form_szB);
+         }
+         nf_i++;
+         continue;
+      }
+      get_Form_contents( &cts, cc, c_die, False/*td3*/, nf );
+      if (attr == DW_AT_addr_base && cts.szB > 0) {
+         Addr addr_base = cts.u.val;
+         if (cc->cu_has_addr_base)
+            vg_assert (addr_base == cc->cu_addr_base);
+         else {
+            cc->cu_has_addr_base = True;
+            cc->cu_addr_base = addr_base;
+         }
+      }
+      if (attr == DW_AT_str_offsets_base && cts.szB > 0) {
+         Addr str_offsets_base = cts.u.val;
+         if (cc->cu_has_str_offsets_base)
+            vg_assert (str_offsets_base == cc->cu_str_offsets_base);
+         else {
+            cc->cu_has_str_offsets_base = True;
+            cc->cu_str_offsets_base = str_offsets_base;
+         }
+       }
+      if (attr == DW_AT_rnglists_base && cts.szB > 0) {
+         Addr rnglists_base = cts.u.val;
+         if (cc->cu_has_rnglists_base)
+            vg_assert (rnglists_base == cc->cu_rnglists_base);
+         else {
+            cc->cu_has_rnglists_base = True;
+            cc->cu_rnglists_base = rnglists_base;
+         }
+       }
+      if (attr == DW_AT_loclists_base && cts.szB > 0) {
+         Addr loclists_base = cts.u.val;
+         if (cc->cu_has_loclists_base)
+            vg_assert (loclists_base == cc->cu_loclists_base);
+         else {
+            cc->cu_has_loclists_base = True;
+            cc->cu_loclists_base = loclists_base;
+         }
+       }
+       nf_i++;
+   }
+   set_position_of_Cursor(c_die, saved_c_pos);
 }
 
 static void trace_DIE(
@@ -2556,7 +2917,8 @@ static void parse_var_DIE (
 
    if (dtag == DW_TAG_compile_unit
        || dtag == DW_TAG_type_unit
-       || dtag == DW_TAG_partial_unit) {
+       || dtag == DW_TAG_partial_unit
+       || dtag == DW_TAG_skeleton_unit) {
       Bool have_lo    = False;
       Bool have_hi1   = False;
       Bool hiIsRelative = False;
@@ -2565,6 +2927,9 @@ static void parse_var_DIE (
       Addr ip_hi1   = 0;
       Addr rangeoff = 0;
       const HChar *compdir = NULL;
+
+      if (level == 0)
+         setup_cu_bases(cc, c_die, abbv);
       nf_i = 0;
       while (True) {
          DW_AT   attr = (DW_AT)  abbv->nf[nf_i].at_name;
@@ -2611,6 +2976,14 @@ static void parse_var_DIE (
          CU's svma? */
       if (level == 0)
          setup_cu_svma(cc, have_lo, ip_lo, td3);
+
+#if defined(VGO_darwin)
+      // FIXME PJF Darwin LLVM generates this (non-standard?) combination
+      // it only seems to affect DRD
+      if (have_lo && have_range && !have_hi1) {
+         have_lo = False;
+      }
+#endif
 
       /* Do we have something that looks sane? */
       if (have_lo && have_hi1 && (!have_range)) {
@@ -2755,7 +3128,6 @@ static void parse_var_DIE (
       UWord  typeR       = D3_INVALID_CUOFF;
       Bool   global      = False;
       GExpr* gexpr       = NULL;
-      Int    n_attrs     = 0;
       UWord  abs_ori     = (UWord)D3_INVALID_CUOFF;
       Int    lineNo      = 0;
       UInt   fndn_ix     = 0;
@@ -2767,7 +3139,6 @@ static void parse_var_DIE (
          nf_i++;
          if (attr == 0 && form == 0) break;
          get_Form_contents( &cts, cc, c_die, False/*td3*/, nf );
-         n_attrs++;
          if (attr == DW_AT_name && cts.szB < 0) {
             name = ML_(addStrFromCursor)( cc->di, cts.u.cur );
          }
@@ -3027,147 +3398,6 @@ typedef
    }
    D3InlParser;
 
-/* Return the function name corresponding to absori.
-
-   absori is a 'cooked' reference to a DIE, i.e. absori can be either
-   in cc->escn_debug_info or in cc->escn_debug_info_alt.
-   get_inlFnName will uncook absori. 
-
-   The returned value is a (permanent) string in DebugInfo's .strchunks.
-
-   LIMITATION: absori must point in the CU of cc. If absori points
-   in another CU, returns "UnknownInlinedFun".
-
-   Here are the problems to retrieve the fun name if absori is in
-   another CU:  the DIE reading code cannot properly extract data from
-   another CU, as the abbv code retrieved in the other CU cannot be
-   translated in an abbreviation. Reading data from the alternate debug
-   info also gives problems as the string reference is also in the alternate
-   file, but when reading the alt DIE, the string form is a 'local' string,
-   but cannot be read in the current CU, but must be read in the alt CU.
-   See bug 338803 comment#3 and attachment for a failed attempt to handle
-   these problems (failed because with the patch, only one alt abbrev hash
-   table is kept, while we must handle all abbreviations in all CUs
-   referenced by an absori (being a reference to an alt CU, or a previous
-   or following CU). */
-static const HChar* get_inlFnName (Int absori, CUConst* cc, Bool td3)
-{
-   Cursor c;
-   const g_abbv *abbv;
-   ULong  atag, abbv_code;
-   UInt   has_children;
-   UWord  posn;
-   Bool type_flag, alt_flag;
-   const HChar *ret = NULL;
-   FormContents cts;
-   UInt nf_i;
-
-   /* Some inlined subroutine call dwarf entries do not have the abstract
-      origin attribute, resulting in absori being 0 (see callers of
-      get_inlFnName). This is observed at least with gcc 6.3.0 when compiling
-      valgrind with lto. So, in case we have a 0 absori, do not report an
-      error, instead, rather return an unknown inlined function. */
-   if (absori == 0) {
-      static Bool absori0_reported = False;
-      if (!absori0_reported && VG_(clo_verbosity) > 1) {
-         VG_(message)(Vg_DebugMsg,
-                      "Warning: inlined fn name without absori\n"
-                      "is shown as UnknownInlinedFun\n");
-         absori0_reported = True;
-      }
-      TRACE_D3(" <get_inlFnName>: absori is not set");
-      return ML_(addStr)(cc->di, "UnknownInlinedFun", -1);
-   }
-
-   posn = uncook_die( cc, absori, &type_flag, &alt_flag);
-   if (type_flag)
-      cc->barf("get_inlFnName: uncooked absori in type debug info");
-
-   /* LIMITATION: check we are in the same CU.
-      If not, return unknown inlined function name. */
-   /* if crossing between alt debug info<>normal info
-          or posn not in the cu range,
-      then it is in another CU. */
-   if (alt_flag != cc->is_alt_info
-       || posn < cc->cu_start_offset
-       || posn >= cc->cu_start_offset + cc->unit_length) {
-      static Bool reported = False;
-      if (!reported && VG_(clo_verbosity) > 1) {
-         VG_(message)(Vg_DebugMsg,
-                      "Warning: cross-CU LIMITATION: some inlined fn names\n"
-                      "might be shown as UnknownInlinedFun\n");
-         reported = True;
-      }
-      TRACE_D3(" <get_inlFnName><%lx>: cross-CU LIMITATION", posn);
-      return ML_(addStr)(cc->di, "UnknownInlinedFun", -1);
-   }
-
-   init_Cursor (&c, cc->escn_debug_info, posn, cc->barf, 
-                "Overrun get_inlFnName absori");
-
-   abbv_code = get_ULEB128( &c );
-   abbv      = get_abbv ( cc, abbv_code, td3);
-   atag      = abbv->atag;
-   TRACE_D3(" <get_inlFnName><%lx>: Abbrev Number: %llu (%s)\n",
-            posn, abbv_code, ML_(pp_DW_TAG)( atag ) );
-
-   if (atag == 0)
-      cc->barf("get_inlFnName: invalid zero tag on DIE");
-
-   has_children = abbv->has_children;
-   if (has_children != DW_children_no && has_children != DW_children_yes)
-      cc->barf("get_inlFnName: invalid has_children value");
-
-   if (atag != DW_TAG_subprogram)
-      cc->barf("get_inlFnName: absori not a subprogram");
-
-   nf_i = 0;
-   while (True) {
-      DW_AT   attr = (DW_AT)  abbv->nf[nf_i].at_name;
-      DW_FORM form = (DW_FORM)abbv->nf[nf_i].at_form;
-      const name_form *nf = &abbv->nf[nf_i];
-      nf_i++;
-      if (attr == 0 && form == 0) break;
-      get_Form_contents( &cts, cc, &c, False/*td3*/, nf );
-      if (attr == DW_AT_name) {
-         HChar *fnname;
-         if (cts.szB >= 0)
-            cc->barf("get_inlFnName: expecting indirect string");
-         fnname = ML_(cur_read_strdup)( cts.u.cur,
-                                        "get_inlFnName.1" );
-         ret = ML_(addStr)(cc->di, fnname, -1);
-         ML_(dinfo_free) (fnname);
-         break; /* Name found, get out of the loop, as this has priority over
-                 DW_AT_specification. */
-      }
-      if (attr == DW_AT_specification) {
-         UWord cdie;
-
-         if (cts.szB == 0)
-            cc->barf("get_inlFnName: AT specification missing");
-
-         /* The recursive call to get_inlFnName will uncook its arg.
-            So, we need to cook it here, so as to reference the
-            correct section (e.g. the alt info). */
-         cdie = cook_die_using_form(cc, (UWord)cts.u.val, form);
-
-         /* hoping that there is no loop */
-         ret = get_inlFnName (cdie, cc, td3);
-         /* Unclear if having both DW_AT_specification and DW_AT_name is
-            possible but in any case, we do not break here. 
-            If we find later on a DW_AT_name, it will override the name found
-            in the DW_AT_specification.*/
-      }
-   }
-
-   if (ret)
-      return ret;
-   else {
-      TRACE_D3("AbsOriFnNameNotFound");
-      return ML_(addStr)(cc->di, "AbsOriFnNameNotFound", -1);
-   }
-}
-
 /* Returns True if the (possibly) childrens of the current DIE are interesting
    to parse. Returns False otherwise.
    If the current DIE has a sibling, the non interesting children can
@@ -3194,13 +3424,16 @@ static Bool parse_inl_DIE (
    /* Get info about DW_TAG_compile_unit and DW_TAG_partial_unit which in theory
       could also contain inlined fn calls, if they cover an address range.  */
    Bool unit_has_addrs = False;
-   if (dtag == DW_TAG_compile_unit || dtag == DW_TAG_partial_unit) {
+   if (dtag == DW_TAG_compile_unit || dtag == DW_TAG_partial_unit
+       || dtag == DW_TAG_skeleton_unit) {
       Bool have_lo    = False;
       Addr ip_lo    = 0;
       const HChar *compdir = NULL;
       Bool has_stmt_list = False;
       ULong cu_line_offset = 0;
 
+      if (level == 0)
+         setup_cu_bases(cc, c_die, abbv);
       nf_i = 0;
       while (True) {
          DW_AT   attr = (DW_AT)  abbv->nf[nf_i].at_name;
@@ -3254,8 +3487,8 @@ static Bool parse_inl_DIE (
       Addr   rangeoff   = 0;
       UInt   caller_fndn_ix = 0;
       Int caller_lineno = 0;
-      Int inlinedfn_abstract_origin = 0;
-      // 0 will be interpreted as no abstract origin by get_inlFnName
+      UWord inlinedfn_abstract_origin = 0;
+      // 0 will be interpreted as no abstract origin
 
       nf_i = 0;
       while (True) {
@@ -3319,7 +3552,7 @@ static Bool parse_inl_DIE (
             ip_hi1 += cc->di->text_debug_bias;
             ML_(addInlInfo) (cc->di,
                              ip_lo, ip_hi1, 
-                             get_inlFnName (inlinedfn_abstract_origin, cc, td3),
+                             inlinedfn_abstract_origin,
                              caller_fndn_ix,
                              caller_lineno, level);
          }
@@ -3327,8 +3560,6 @@ static Bool parse_inl_DIE (
          /* This inlined call is several address ranges. */
          XArray *ranges;
          Word j;
-         const HChar *inlfnname =
-            get_inlFnName (inlinedfn_abstract_origin, cc, td3);
 
          /* Ranges are biased for the inline info using the same logic
             as what is used for biasing ranges for the var info, for which
@@ -3345,7 +3576,7 @@ static Bool parse_inl_DIE (
                              // aMax+1 as range has its last bound included
                              // while ML_(addInlInfo) expects last bound not
                              // included.
-                             inlfnname,
+                             inlinedfn_abstract_origin,
                              caller_fndn_ix,
                              caller_lineno, level);
          }
@@ -3354,11 +3585,91 @@ static Bool parse_inl_DIE (
          goto_bad_DIE;
    }
 
+   if (dtag == DW_TAG_subprogram) {
+      DiSubprogram sub;
+      sub.index = posn; /* Note posn is already cooked.  */
+      sub.isArtificial = False;
+      UWord cdie = 0;
+      const HChar *fn = NULL;
+      Bool name_or_spec = False;
+      nf_i = 0;
+      while (True) {
+         DW_AT   attr = (DW_AT)  abbv->nf[nf_i].at_name;
+         DW_FORM form = (DW_FORM)abbv->nf[nf_i].at_form;
+         const name_form *nf = &abbv->nf[nf_i];
+         nf_i++;
+         if (attr == 0 && form == 0) break;
+         get_Form_contents( &cts, cc, c_die, False/*td3*/, nf );
+         if (attr == DW_AT_sibling && cts.szB > 0) {
+            parser->sibling = cts.u.val;
+         }
+         if (attr == DW_AT_artificial && cts.u.val == 1) {
+            sub.isArtificial = True;
+         }
+         if ((attr == DW_AT_specification
+              || attr == DW_AT_abstract_origin)
+             && cts.szB > 0 && cts.u.val > 0) {
+            name_or_spec = True;
+            cdie = cook_die_using_form(cc, (UWord)cts.u.val, form);
+            sub.ref.subprog = cdie;
+            sub.isSubprogRef = True;
+         }
+         if (attr == DW_AT_name && cts.szB < 0) {
+            HChar *fnname;
+            name_or_spec = True;
+            fnname = ML_(cur_read_strdup)( cts.u.cur,
+                                           ".1" );
+            fn = ML_(addStr)(cc->di, fnname, -1);
+            ML_(dinfo_free) (fnname);
+            sub.ref.fn = fn;
+            sub.isSubprogRef = False;
+         }
+      }
+      /* Clang doesn't give a name for some artificial subprograms.
+         Just use "<artificial>" as the name.  */
+      if (!name_or_spec && sub.isArtificial) {
+         name_or_spec = True;
+         fn = ML_(addStr)(cc->di, "<artificial>", -1);
+         sub.ref.fn = fn;
+         sub.isSubprogRef = False;
+      }
+      if (name_or_spec)
+         ML_(addSubprogram) (cc->di, &sub);
+      else if (nf_i > 1 /* Clang produces empty subprograms, no attrs.  */
+               && VG_(clo_verbosity) >= 1) {
+         /* Only warn once per debug file.  */
+         static HChar *last_dbgname;
+         HChar *dbgname = cc->di->fsm.dbgname
+            ? cc->di->fsm.dbgname : cc->di->fsm.filename;
+         if (last_dbgname != dbgname) {
+            VG_(message)(Vg_DebugMsg,
+                         "Warning: <%lx> DW_TAG_subprogram with no"
+                         " DW_AT_name and no DW_AT_specification or"
+                         " DW_AT_abstract_origin in %s\n", posn, dbgname);
+            last_dbgname = dbgname;
+         }
+      }
+   }
+
    // Only recursively parse the (possible) children for the DIE which
-   // might maybe contain a DW_TAG_inlined_subroutine:
+   // might maybe contain a DW_TAG_inlined_subroutine or DW_TAG_subprogram.
+   // subprograms can also appear without addresses.
    Bool ret = (unit_has_addrs
-               || dtag == DW_TAG_lexical_block || dtag == DW_TAG_subprogram
-               || dtag == DW_TAG_inlined_subroutine || dtag == DW_TAG_namespace);
+               || dtag == DW_TAG_compile_unit
+               || dtag == DW_TAG_partial_unit
+               || dtag == DW_TAG_lexical_block
+               || dtag == DW_TAG_subprogram
+               || dtag == DW_TAG_inlined_subroutine
+               || dtag == DW_TAG_namespace
+               || dtag == DW_TAG_enumeration_type
+               || dtag == DW_TAG_class_type
+               || dtag == DW_TAG_structure_type
+               || dtag == DW_TAG_union_type
+               || dtag == DW_TAG_module
+               || dtag == DW_TAG_with_stmt
+               || dtag == DW_TAG_catch_block
+               || dtag == DW_TAG_try_block
+               || dtag == DW_TAG_entry_point);
    return ret;
 
   bad_DIE:
@@ -3560,7 +3871,7 @@ static void parse_type_DIE ( /*MOD*/XArray* /* of TyEnt */ tyents,
                              Int level,
                              Cursor* c_die,
                              const g_abbv *abbv,
-                             const CUConst* cc,
+                             CUConst* cc,
                              Bool td3 )
 {
    FormContents cts;
@@ -3584,7 +3895,10 @@ static void parse_type_DIE ( /*MOD*/XArray* /* of TyEnt */ tyents,
 
    if (dtag == DW_TAG_compile_unit
        || dtag == DW_TAG_type_unit
-       || dtag == DW_TAG_partial_unit) {
+       || dtag == DW_TAG_partial_unit
+       || dtag == DW_TAG_skeleton_unit) {
+      if (level == 0)
+         setup_cu_bases(cc, c_die, abbv);
       /* See if we can find DW_AT_language, since it is important for
          establishing array bounds (see DW_TAG_subrange_type below in
          this fn) */
@@ -3605,19 +3919,42 @@ static void parse_type_DIE ( /*MOD*/XArray* /* of TyEnt */ tyents,
             case DW_LANG_C_plus_plus: case DW_LANG_ObjC:
             case DW_LANG_ObjC_plus_plus: case DW_LANG_UPC:
             case DW_LANG_Upc: case DW_LANG_C99: case DW_LANG_C11:
+            case DW_LANG_C17: case DW_LANG_C23:
             case DW_LANG_C_plus_plus_11: case DW_LANG_C_plus_plus_14:
+            case DW_LANG_C_plus_plus_17: case DW_LANG_C_plus_plus_20:
+            case DW_LANG_C_plus_plus_23:
                parser->language = 'C'; break;
             case DW_LANG_Fortran77: case DW_LANG_Fortran90:
             case DW_LANG_Fortran95: case DW_LANG_Fortran03:
-            case DW_LANG_Fortran08:
+            case DW_LANG_Fortran08: case DW_LANG_Fortran18:
+            case DW_LANG_Fortran23:
                parser->language = 'F'; break;
             case DW_LANG_Ada83: case DW_LANG_Ada95: 
+            case DW_LANG_Ada2005: case DW_LANG_Ada2012:
                parser->language = 'A'; break;
             case DW_LANG_Cobol74:
             case DW_LANG_Cobol85: case DW_LANG_Pascal83:
             case DW_LANG_Modula2: case DW_LANG_Java:
             case DW_LANG_PLI:
-            case DW_LANG_D: case DW_LANG_Python: case DW_LANG_Go:
+            case DW_LANG_D: case DW_LANG_Python:
+            case DW_LANG_OpenCL: case DW_LANG_Go:
+            case DW_LANG_Modula3: case DW_LANG_Haskell:
+            case DW_LANG_OCaml: case DW_LANG_Rust: case DW_LANG_Swift:
+            case DW_LANG_Julia: case DW_LANG_Dylan:
+            case DW_LANG_RenderScript: case DW_LANG_BLISS:
+            case DW_LANG_Kotlin: case DW_LANG_Zig:
+            case DW_LANG_Crystal: case DW_LANG_HIP:
+            case DW_LANG_Assembly: case DW_LANG_C_sharp:
+            case DW_LANG_Mojo: case DW_LANG_GLSL:
+            case DW_LANG_GLSL_ES: case DW_LANG_HLSL:
+            case DW_LANG_OpenCL_CPP: case DW_LANG_CPP_for_OpenCL:
+            case DW_LANG_SYCL:
+            case DW_LANG_Odin:
+            case DW_LANG_P4:
+            case DW_LANG_Metal:
+            case DW_LANG_Ruby:
+            case DW_LANG_Move:
+            case DW_LANG_Hylo:
             case DW_LANG_Mips_Assembler:
                parser->language = '?'; break;
             default:
@@ -4201,7 +4538,7 @@ static void parse_type_DIE ( /*MOD*/XArray* /* of TyEnt */ tyents,
          boundE.Te.Bound.knownL = True;
          boundE.Te.Bound.knownU = True;
          boundE.Te.Bound.boundL = lower;
-         boundE.Te.Bound.boundU = lower + count;
+         boundE.Te.Bound.boundU = lower + count - 1;
       } else {
          /* FIXME: handle more cases */
          goto_bad_DIE;
@@ -5075,7 +5412,8 @@ void new_dwarf3_reader_wrk (
    DiSlice escn_debug_rnglists,  DiSlice escn_debug_loclists,
    DiSlice escn_debug_loc,       DiSlice escn_debug_info_alt,
    DiSlice escn_debug_abbv_alt,  DiSlice escn_debug_line_alt,
-   DiSlice escn_debug_str_alt,   DiSlice escn_debug_line_str
+   DiSlice escn_debug_str_alt,   DiSlice escn_debug_line_str,
+   DiSlice escn_debug_addr,      DiSlice escn_debug_str_offsets
 )
 {
    XArray* /* of TyEnt */     tyents = NULL;
@@ -5218,8 +5556,10 @@ void new_dwarf3_reader_wrk (
    }
 
    /* Perform three DIE-reading passes.  The first pass reads DIEs from
-      alternate .debug_info (if any), the second pass reads DIEs from
-      .debug_info, and the third pass reads DIEs from .debug_types.
+      .debug_info, the second pass reads DIEs from .debug_types (if any),
+      and the third pass reads DIEs from the alternate .debug_info (if any).
+      This is in the order that cook_die numbers the DIEs, so the inlined
+      parser can add subprograms in order.
       Moving the body of this loop into a separate function would
       require a large number of arguments to be passed in, so it is
       kept inline instead.  */
@@ -5227,6 +5567,34 @@ void new_dwarf3_reader_wrk (
       ULong section_size;
 
       if (pass == 0) {
+         /* Now loop over the Compilation Units listed in the .debug_info
+            section (see D3SPEC sec 7.5) paras 1 and 2.  Each compilation
+            unit contains a Compilation Unit Header followed by precisely
+            one DW_TAG_compile_unit or DW_TAG_partial_unit DIE. */
+         init_Cursor( &info, escn_debug_info, 0, barf,
+                      "Overrun whilst reading .debug_info section" );
+         section_size = escn_debug_info.szB;
+
+	 /* Keep track of the last line table we have seen,
+            it might turn up again.  */
+         reset_fndn_ix_table(&fndn_ix_Table, &debug_line_offset, (ULong) -1);
+
+         TRACE_D3("\n------ Parsing .debug_info section ------\n");
+      } else if (pass == 1) {
+         if (!ML_(sli_is_valid)(escn_debug_types))
+            continue;
+         if (!VG_(clo_read_var_info))
+            continue; // Types not needed when only reading inline info.
+         init_Cursor( &info, escn_debug_types, 0, barf,
+                      "Overrun whilst reading .debug_types section" );
+         section_size = escn_debug_types.szB;
+
+	 /* Keep track of the last line table we have seen,
+            it might turn up again.  */
+         reset_fndn_ix_table(&fndn_ix_Table, &debug_line_offset, (ULong) -1);
+
+         TRACE_D3("\n------ Parsing .debug_types section ------\n");
+      } else {
          if (!ML_(sli_is_valid)(escn_debug_info_alt))
 	    continue;
          /* Now loop over the Compilation Units listed in the alternate
@@ -5243,34 +5611,6 @@ void new_dwarf3_reader_wrk (
          reset_fndn_ix_table(&fndn_ix_Table, &debug_line_offset, (ULong) -1);
 
          TRACE_D3("\n------ Parsing alternate .debug_info section ------\n");
-      } else if (pass == 1) {
-         /* Now loop over the Compilation Units listed in the .debug_info
-            section (see D3SPEC sec 7.5) paras 1 and 2.  Each compilation
-            unit contains a Compilation Unit Header followed by precisely
-            one DW_TAG_compile_unit or DW_TAG_partial_unit DIE. */
-         init_Cursor( &info, escn_debug_info, 0, barf,
-                      "Overrun whilst reading .debug_info section" );
-         section_size = escn_debug_info.szB;
-
-	 /* Keep track of the last line table we have seen,
-            it might turn up again.  */
-         reset_fndn_ix_table(&fndn_ix_Table, &debug_line_offset, (ULong) -1);
-
-         TRACE_D3("\n------ Parsing .debug_info section ------\n");
-      } else {
-         if (!ML_(sli_is_valid)(escn_debug_types))
-            continue;
-         if (!VG_(clo_read_var_info))
-            continue; // Types not needed when only reading inline info.
-         init_Cursor( &info, escn_debug_types, 0, barf,
-                      "Overrun whilst reading .debug_types section" );
-         section_size = escn_debug_types.szB;
-
-	 /* Keep track of the last line table we have seen,
-            it might turn up again.  */
-         reset_fndn_ix_table(&fndn_ix_Table, &debug_line_offset, (ULong) -1);
-
-         TRACE_D3("\n------ Parsing .debug_types section ------\n");
       }
 
       abbv_state last_abbv;
@@ -5322,30 +5662,40 @@ void new_dwarf3_reader_wrk (
          TRACE_D3("\n");
          TRACE_D3("  Compilation Unit @ offset 0x%llx:\n", cu_start_offset);
          /* parse_CU_header initialises the CU's hashtable of abbvs ht_abbvs */
-         if (pass == 0) {
+         if (pass == 2) {
             parse_CU_Header( &cc, td3, &info, escn_debug_abbv_alt,
                              last_abbv, False, True );
          } else {
             parse_CU_Header( &cc, td3, &info, escn_debug_abbv,
-                             last_abbv, pass == 2, False );
+                             last_abbv, pass == 1, False );
          }
-         cc.escn_debug_str      = pass == 0 ? escn_debug_str_alt
+         cc.escn_debug_str      = pass == 2 ? escn_debug_str_alt
                                             : escn_debug_str;
          cc.escn_debug_ranges   = escn_debug_ranges;
          cc.escn_debug_rnglists = escn_debug_rnglists;
          cc.escn_debug_loclists = escn_debug_loclists;
          cc.escn_debug_loc      = escn_debug_loc;
-         cc.escn_debug_line     = pass == 0 ? escn_debug_line_alt
+         cc.escn_debug_line     = pass == 2 ? escn_debug_line_alt
                                             : escn_debug_line;
-         cc.escn_debug_info     = pass == 0 ? escn_debug_info_alt
+         cc.escn_debug_info     = pass == 2 ? escn_debug_info_alt
                                             : escn_debug_info;
          cc.escn_debug_types    = escn_debug_types;
          cc.escn_debug_info_alt = escn_debug_info_alt;
          cc.escn_debug_str_alt  = escn_debug_str_alt;
          cc.escn_debug_line_str = escn_debug_line_str;
+         cc.escn_debug_addr     = escn_debug_addr;
+         cc.escn_debug_str_offsets = escn_debug_str_offsets;
          cc.types_cuOff_bias    = escn_debug_info.szB;
          cc.alt_cuOff_bias      = escn_debug_info.szB + escn_debug_types.szB;
          cc.cu_start_offset     = cu_start_offset;
+         cc.cu_addr_base        = 0;
+         cc.cu_has_addr_base    = False;
+         cc.cu_str_offsets_base = 0;
+         cc.cu_has_str_offsets_base = False;
+         cc.cu_rnglists_base = 0;
+         cc.cu_has_rnglists_base = False;
+         cc.cu_loclists_base = 0;
+         cc.cu_has_loclists_base = False;
          cc.di = di;
          /* The CU's svma can be deduced by looking at the AT_low_pc
             value in the top level TAG_compile_unit, which is the topmost
@@ -5760,6 +6110,99 @@ void new_dwarf3_reader_wrk (
    }
 }
 
+static Word search_one_subtab ( DebugInfo* di, UWord index )
+{
+   Word mid,
+        lo = 0,
+        hi = di->subtab_used-1;
+   UWord mid_index;
+   while (True) {
+      /* current unsearched space is from lo to hi, inclusive. */
+      if (lo > hi) return -1; /* not found */
+      mid       = (lo + hi) / 2;
+      mid_index = di->subtab[mid].index;
+
+      if (mid_index > index) { hi = mid-1; continue; }
+      if (mid_index < index) { lo = mid+1; continue; }
+      vg_assert(index == mid_index);
+      return mid;
+   }
+}
+
+/* Report an issue only once, we cannot really give too good an error
+   message since we don't know the exact DIE that was broken.
+   So only report once per DebugInfo file.  */
+static void report_resolve_subprogram_issue (DebugInfo *di, const HChar *msg)
+{
+   static HChar *last_dbgname;
+   HChar *dbgname = di->fsm.dbgname ? di->fsm.dbgname : di->fsm.filename;
+   if (last_dbgname != dbgname) {
+      if (VG_(clo_verbosity) >= 1)
+         VG_(message)(Vg_DebugMsg, "Warning: %s in %s\n", msg, dbgname);
+      last_dbgname = dbgname;
+   }
+}
+
+static void resolve_subprograms ( DebugInfo* di )
+{
+   for (UWord i = 0; i < di->inltab_used; i++) {
+      Word s = di->inltab[i].inlined.subprog;
+      if (s == 0) {
+	 report_resolve_subprogram_issue
+            (di, "zero subprog, missing DW_AT_abstract_origin in"
+             " DW_TAG_inlined_subroutine");
+         di->inltab[i].inlined.fn = ML_(addStr)(di, "UnknownInlinedFun", -1);
+         continue;
+      }
+      s = search_one_subtab (di, di->inltab[i].inlined.subprog);
+      if (s == -1) {
+         report_resolve_subprogram_issue
+            (di, "subprog not found, DW_TAG_inlined_subroutine points to"
+             " unknown DW_TAG_subprogram");
+         di->inltab[i].inlined.fn = ML_(addStr)(di, "UnknownInlinedFun", -1);
+         continue;
+      }
+      /* We allow two indirections, subprograms with abstract origins.  */
+      if (di->subtab[s].isSubprogRef) {
+         s = search_one_subtab (di, di->subtab[s].ref.subprog);
+         if (s == -1) {
+	    report_resolve_subprogram_issue
+               (di, "subprog ref not found, DW_TAG_subprogram has an"
+                " unknown DW_AT_abstract_origin or DW_AT_specification");
+            di->inltab[i].inlined.fn = ML_(addStr)(di,
+                                                   "UnknownInlinedFun", -1);
+            continue;
+         }
+      }
+      if (di->subtab[s].isSubprogRef) {
+         s = search_one_subtab (di, di->subtab[s].ref.subprog);
+         if (s == -1) {
+	    report_resolve_subprogram_issue
+               (di, "subprog ref to ref not found, DW_TAG_subprogram has an"
+                " unknown DW_AT_abstract_origin or DW_AT_specification");
+            di->inltab[i].inlined.fn = ML_(addStr)(di,
+                                                   "UnknownInlinedFun", -1);
+            continue;
+         }
+      }
+      if (di->subtab[s].isSubprogRef)
+      {
+         report_resolve_subprogram_issue
+            (di, "too many subprog indirections for DW_TAG_subprogram"
+             " with DW_AT_abstract_origin or DW_AT_specification refs");
+         di->inltab[i].inlined.fn = ML_(addStr)(di,
+                                                "UnknownInlinedFun", -1);
+         continue;
+      }
+      di->inltab[i].inlined.fn = di->subtab[s].ref.fn;
+   }
+
+   /* We don't need the SubPrograms anymore.  */
+   ML_(dinfo_free)(di->subtab);
+   di->subtab = NULL;
+   di->subtab_used = 0;
+   di->subtab_size = 0;
+}
 
 /*------------------------------------------------------------*/
 /*---                                                      ---*/
@@ -5789,7 +6232,8 @@ ML_(new_dwarf3_reader) (
    DiSlice escn_debug_rnglists,  DiSlice escn_debug_loclists,
    DiSlice escn_debug_loc,       DiSlice escn_debug_info_alt,
    DiSlice escn_debug_abbv_alt,  DiSlice escn_debug_line_alt,
-   DiSlice escn_debug_str_alt,   DiSlice escn_debug_line_str
+   DiSlice escn_debug_str_alt,   DiSlice escn_debug_line_str,
+   DiSlice escn_debug_addr,      DiSlice escn_debug_str_offsets
 )
 {
    volatile Int  jumped;
@@ -5813,7 +6257,8 @@ ML_(new_dwarf3_reader) (
                              escn_debug_rnglists, escn_debug_loclists,
                              escn_debug_loc,      escn_debug_info_alt,
                              escn_debug_abbv_alt, escn_debug_line_alt,
-                             escn_debug_str_alt,  escn_debug_line_str );
+                             escn_debug_str_alt,  escn_debug_line_str,
+                             escn_debug_addr,     escn_debug_str_offsets );
       d3rd_jmpbuf_valid = False;
       TRACE_D3("\n------ .debug_info reading was successful ------\n");
    } else {
@@ -5829,6 +6274,10 @@ ML_(new_dwarf3_reader) (
 
    d3rd_jmpbuf_valid  = False;
    d3rd_jmpbuf_reason = NULL;
+
+   /* Always call this even after .debug_info reading failed, to make sure
+      any known inlined subroutine names are resolved and memory freed.  */
+   resolve_subprograms (di);
 }
 
 

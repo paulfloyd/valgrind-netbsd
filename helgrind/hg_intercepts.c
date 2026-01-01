@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -55,6 +55,8 @@
 #include "pub_tool_clreq.h"
 #include "helgrind.h"
 #include "config.h"
+#include <string.h>
+#include <unistd.h>
 
 
 #if defined(VGO_solaris)
@@ -113,6 +115,14 @@
 #define LIBC_FUNC(ret_ty, f, args...) \
    ret_ty I_WRAP_SONAME_FNNAME_ZZ(VG_Z_LIBC_SONAME,f)(args); \
    ret_ty I_WRAP_SONAME_FNNAME_ZZ(VG_Z_LIBC_SONAME,f)(args)
+
+#include <osreldate.h>
+#endif
+
+#if defined(VGO_darwin)
+#define LIBC_FUNC(ret_ty, f, args...) \
+   ret_ty I_WRAP_SONAME_FNNAME_ZZ(VG_Z_LIBSYSTEM_KERNEL_SONAME,f)(args); \
+   ret_ty I_WRAP_SONAME_FNNAME_ZZ(VG_Z_LIBSYSTEM_KERNEL_SONAME,f)(args)
 #endif
 
 // Do a client request.  These are macros rather than a functions so
@@ -132,7 +142,7 @@
 #define DO_CREQ_v_W(_creqF, _ty1F,_arg1F)                \
    do {                                                  \
       Word _arg1;                                        \
-      assert(sizeof(_ty1F) == sizeof(Word));             \
+      STATIC_ASSERT(sizeof(_ty1F) == sizeof(Word));      \
       _arg1 = (Word)(_arg1F);                            \
       VALGRIND_DO_CLIENT_REQUEST_STMT((_creqF),          \
                                  _arg1, 0,0,0,0);        \
@@ -141,8 +151,8 @@
 #define DO_CREQ_v_WW(_creqF, _ty1F,_arg1F, _ty2F,_arg2F) \
    do {                                                  \
       Word _arg1, _arg2;                                 \
-      assert(sizeof(_ty1F) == sizeof(Word));             \
-      assert(sizeof(_ty2F) == sizeof(Word));             \
+      STATIC_ASSERT(sizeof(_ty1F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty2F) == sizeof(Word));      \
       _arg1 = (Word)(_arg1F);                            \
       _arg2 = (Word)(_arg2F);                            \
       VALGRIND_DO_CLIENT_REQUEST_STMT((_creqF),          \
@@ -153,8 +163,8 @@
                      _ty2F,_arg2F)                       \
    do {                                                  \
       Word _res, _arg1, _arg2;                           \
-      assert(sizeof(_ty1F) == sizeof(Word));             \
-      assert(sizeof(_ty2F) == sizeof(Word));             \
+      STATIC_ASSERT(sizeof(_ty1F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty2F) == sizeof(Word));      \
       _arg1 = (Word)(_arg1F);                            \
       _arg2 = (Word)(_arg2F);                            \
       _res = VALGRIND_DO_CLIENT_REQUEST_EXPR(2,          \
@@ -167,9 +177,9 @@
                       _ty2F,_arg2F, _ty3F, _arg3F)       \
    do {                                                  \
       Word _arg1, _arg2, _arg3;                          \
-      assert(sizeof(_ty1F) == sizeof(Word));             \
-      assert(sizeof(_ty2F) == sizeof(Word));             \
-      assert(sizeof(_ty3F) == sizeof(Word));             \
+      STATIC_ASSERT(sizeof(_ty1F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty2F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty3F) == sizeof(Word));      \
       _arg1 = (Word)(_arg1F);                            \
       _arg2 = (Word)(_arg2F);                            \
       _arg3 = (Word)(_arg3F);                            \
@@ -182,10 +192,10 @@
                        _ty4F, _arg4F)                    \
    do {                                                  \
       Word _arg1, _arg2, _arg3, _arg4;                   \
-      assert(sizeof(_ty1F) == sizeof(Word));             \
-      assert(sizeof(_ty2F) == sizeof(Word));             \
-      assert(sizeof(_ty3F) == sizeof(Word));             \
-      assert(sizeof(_ty4F) == sizeof(Word));             \
+      STATIC_ASSERT(sizeof(_ty1F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty2F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty3F) == sizeof(Word));      \
+      STATIC_ASSERT(sizeof(_ty4F) == sizeof(Word));      \
       _arg1 = (Word)(_arg1F);                            \
       _arg2 = (Word)(_arg2F);                            \
       _arg3 = (Word)(_arg3F);                            \
@@ -569,7 +579,7 @@ static int thr_create_WRK(void *stk, size_t stksize, void *(*start)(void *),
 // glibc:  pthread_join
 // darwin: pthread_join
 // darwin: pthread_join$NOCANCEL$UNIX2003
-// darwin: pthread_join$UNIX2003
+// darwin  pthread_join$UNIX2003
 // FreeBSD: pthread_join
 __attribute__((noinline))
 static int pthread_join_WRK(pthread_t thread, void** value_pointer)
@@ -890,7 +900,9 @@ static int mutex_destroy_WRK(pthread_mutex_t *mutex)
 
    if (mutex != NULL) {
       static const pthread_mutex_t mutex_init = PTHREAD_MUTEX_INITIALIZER;
+      VALGRIND_HG_DISABLE_CHECKING(mutex, sizeof(*mutex));
       mutex_is_init = my_memcmp(mutex, &mutex_init, sizeof(*mutex)) == 0;
+      VALGRIND_HG_ENABLE_CHECKING(mutex, sizeof(*mutex));
    } else {
       mutex_is_init = 0;
    }
@@ -924,6 +936,50 @@ static int mutex_destroy_WRK(pthread_mutex_t *mutex)
 #  error "Unsupported OS"
 #endif
 
+#if defined(VGO_freebsd)
+
+/*
+ * Bugzilla 494337
+ *
+ * Hacks'R'Us
+ * FreeBSD 15 (backported to 14.2) add a mutex lock to
+ * exit to ensure that it is thread-safe. But this lock
+ * never gets unlocked. That meant this lock was causing
+ * all threaded apps to generate a Helgrind still holding
+ * lock errors. So in time honoured tradition, this can
+ * be fixed with a hack. This adds a wrapper to exit()
+ * that sets a global variable hg_in_exit. In the next
+ * call to pthread_mutex_lock, if that variable is 1
+ * then the pthread_mutex_lock wrapper only calls the
+ * wrapped function. It does not call the PRE and POST
+ * userreq functions. It then resets hg_in_exit to 0
+ * (because there will be more locks in the atexit
+ * processing).
+ */
+
+int hg_in_exit = 0;
+
+static int exit_WRK(int status)
+{
+   int ret;
+   OrigFn fn;
+   VALGRIND_GET_ORIG_FN(fn);
+
+#if (__FreeBSD_version >= 1401500)
+   hg_in_exit = 1;
+#endif
+
+   CALL_FN_W_W(ret, fn, status);
+
+   return ret;
+}
+
+LIBC_FUNC(int, exit, int res) {
+   return exit_WRK(res);
+}
+
+#endif
+
 
 //-----------------------------------------------------------
 // glibc:   pthread_mutex_lock
@@ -937,8 +993,19 @@ static int mutex_lock_WRK(pthread_mutex_t *mutex)
    OrigFn fn;
    VALGRIND_GET_ORIG_FN(fn);
    if (TRACE_PTH_FNS) {
-      fprintf(stderr, "<< pthread_mxlock %p", mutex); fflush(stderr);
+      char buf[30];
+      snprintf(buf, 30, "<< pthread_mxlock %p", mutex);
+      (void)write(STDERR_FILENO, buf, strlen(buf));
+      fsync(STDERR_FILENO);
    }
+
+#if defined(VGO_freebsd)
+   if (hg_in_exit) {
+      CALL_FN_W_W(ret, fn, mutex);
+      hg_in_exit = 0;
+      goto HG_MUTEX_LOCK_OUT;
+   }
+#endif
 
    DO_CREQ_v_WW(_VG_USERREQ__HG_PTHREAD_MUTEX_LOCK_PRE,
                 pthread_mutex_t*,mutex, long,0/*!isTryLock*/);
@@ -953,12 +1020,18 @@ static int mutex_lock_WRK(pthread_mutex_t *mutex)
    DO_CREQ_v_WW(_VG_USERREQ__HG_PTHREAD_MUTEX_LOCK_POST,
                 pthread_mutex_t *, mutex, long, (ret == 0) ? True : False);
 
+#if defined(VGO_freebsd)
+HG_MUTEX_LOCK_OUT:
+#endif
+
    if (ret != 0) {
       DO_PthAPIerror( "pthread_mutex_lock", ret );
    }
 
    if (TRACE_PTH_FNS) {
-      fprintf(stderr, " :: mxlock -> %d >>\n", ret);
+      char buf[30];
+      snprintf(buf, 30, " :: mxlock -> %d >>\n", ret);
+      (void)write(STDERR_FILENO, buf, strlen(buf));
    }
    return ret;
 }
@@ -1121,7 +1194,7 @@ PTH_FUNC(int, pthreadZumutexZureltimedlock, // pthread_mutex_reltimedlock
 }
 #endif
 
-#if defined(VGP_linux)
+#if defined(VGO_linux)
 //-----------------------------------------------------------
 // glibc:   pthread_mutex_clocklock
 //
@@ -1184,7 +1257,10 @@ static int mutex_unlock_WRK(pthread_mutex_t *mutex)
    VALGRIND_GET_ORIG_FN(fn);
 
    if (TRACE_PTH_FNS) {
-      fprintf(stderr, "<< pthread_mxunlk %p", mutex); fflush(stderr);
+      char buf[30];
+      snprintf(buf, 30, "<< pthread_mxunlk %p", mutex);
+      (void)write(STDERR_FILENO, buf, strlen(buf));
+      fsync(STDERR_FILENO);
    }
 
    DO_CREQ_v_W(_VG_USERREQ__HG_PTHREAD_MUTEX_UNLOCK_PRE,
@@ -1200,12 +1276,14 @@ static int mutex_unlock_WRK(pthread_mutex_t *mutex)
    }
 
    if (TRACE_PTH_FNS) {
-      fprintf(stderr, " mxunlk -> %d >>\n", ret);
+      char buf[30];
+      snprintf(buf, 30, " :: mxunlk -> %d >>\n", ret);
+      (void)write(STDERR_FILENO, buf, strlen(buf));
    }
    return ret;
 }
 
-#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    PTH_FUNC(int, pthreadZumutexZuunlock, // pthread_mutex_unlock
             pthread_mutex_t *mutex) {
       return mutex_unlock_WRK(mutex);
@@ -1343,7 +1421,7 @@ static int pthread_cond_wait_WRK(pthread_cond_t* cond,
    }
 #elif defined(VGO_netbsd)
 PTH_FUNC(int, pthreadZucondZuwait, // pthread_cond_wait
-                 pthread_cond_t* cond, pthread_mutex_t* mutex) {
+                 pthread_cond_t *cond, pthread_mutex_t *mutex) {
       return pthread_cond_wait_WRK(cond, mutex);
    }
 #else
@@ -1469,6 +1547,11 @@ static int pthread_cond_timedwait_WRK(pthread_cond_t* cond,
                  pthread_cond_t *cond, pthread_mutex_t *mutex,
                  struct timespec *reltime) {
       return pthread_cond_timedwait_WRK(cond, mutex, reltime, ETIME);
+   }
+   PTH_FUNC(int, pthreadZucondZutimedwait, // pthread_cond_timedwait
+                 pthread_cond_t* cond, pthread_mutex_t* mutex,
+                 struct timespec* abstime) {
+      return pthread_cond_timedwait_WRK(cond, mutex, abstime, ETIMEDOUT);
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZucondZutimedwait, // pthread_cond_timedwait
@@ -1624,7 +1707,7 @@ static int pthread_cond_signal_WRK(pthread_cond_t* cond)
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZucondZusignal, // pthread_cond_signal
-                 pthread_cond_t* cond) {
+                 pthread_cond_t *cond) {
       return pthread_cond_signal_WRK(cond);
    }
 #else
@@ -1822,7 +1905,9 @@ static int pthread_cond_destroy_WRK(pthread_cond_t* cond)
 
    if (cond != NULL) {
       const pthread_cond_t cond_init = PTHREAD_COND_INITIALIZER;
+      VALGRIND_HG_DISABLE_CHECKING(cond, sizeof(*cond));
       cond_is_init = my_memcmp(cond, &cond_init, sizeof(*cond)) == 0;
+      VALGRIND_HG_ENABLE_CHECKING(cond, sizeof(*cond));
    } else {
      cond_is_init = 0;
    }
@@ -1864,7 +1949,7 @@ static int pthread_cond_destroy_WRK(pthread_cond_t* cond)
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZucondZudestroy, // pthread_cond_destroy
-                 pthread_cond_t* cond) {
+                 pthread_cond_t *cond) {
       return pthread_cond_destroy_WRK(cond);
    }
 #else
@@ -2288,9 +2373,6 @@ static int pthread_spin_trylock_WRK(pthread_spinlock_t *lock)
               pthread_rwlock_unlock
               pthread_rwlock_tryrdlock
               pthread_rwlock_trywrlock
-
-   Unhandled: pthread_rwlock_timedrdlock
-              pthread_rwlock_timedwrlock
 */
 
 //-----------------------------------------------------------
@@ -2661,7 +2743,19 @@ static int pthread_rwlock_trywrlock_WRK(pthread_rwlock_t* rwlock)
                  pthread_rwlock_t*,rwlock, long,1/*isW*/,
                  long, (ret == 0) ? True : False);
    if (ret != 0) {
+      Bool api_error = False;
+#if defined(VGO_darwin)
+      // When rwlock is locked and there is an attempt to trylock it on the
+      // same thread POSIX says that it may return EADADLK. Darwin is the
+      // only one to do this, Linux, FreeBSD and Solaris all return EBUSY.
+      if (ret != EBUSY && ret != EDEADLK)
+         api_error = True;
+#else
       if (ret != EBUSY)
+         api_error = True;
+#endif
+
+      if (api_error)
          DO_PthAPIerror( "pthread_rwlock_trywrlock", ret );
    }
 
@@ -2692,7 +2786,7 @@ static int pthread_rwlock_trywrlock_WRK(pthread_rwlock_t* rwlock)
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZurwlockZutrywrlock, // pthread_rwlock_trywrlock
-                 pthread_rwlock_t* rwlock) {
+                 pthread_rwlock_t *rwlock) {
       return pthread_rwlock_trywrlock_WRK(rwlock);
    }
 #else
@@ -2771,9 +2865,10 @@ static int pthread_rwlock_tryrdlock_WRK(pthread_rwlock_t* rwlock)
 #  error "Unsupported OS"
 #endif
 
+static Bool in_pthread_rwlock_timedrdlock_WRK = False;
 
 //-----------------------------------------------------------
-// glibc:   Unhandled
+// glibc:   pthread_rwlock_timedrdlock
 // darwin:  Unhandled
 // Solaris: pthread_rwlock_timedrdlock
 // Solaris: pthread_rwlock_reltimedrdlock_np
@@ -2794,12 +2889,16 @@ static int pthread_rwlock_timedrdlock_WRK(pthread_rwlock_t *rwlock,
                  pthread_rwlock_t *, rwlock,
                  long, 0/*isW*/, long, 0/*isTryLock*/);
 
+   in_pthread_rwlock_timedrdlock_WRK = True;
    CALL_FN_W_WW(ret, fn, rwlock, timeout);
+   in_pthread_rwlock_timedrdlock_WRK = False;
 
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_POST,
                  pthread_rwlock_t *, rwlock, long, 0/*isW*/,
                  long, (ret == 0) ? True : False);
+
    if (ret != 0) {
+      if (ret != ETIMEDOUT)
       DO_PthAPIerror("pthread_rwlock_timedrdlock", ret);
    }
 
@@ -2809,6 +2908,11 @@ static int pthread_rwlock_timedrdlock_WRK(pthread_rwlock_t *rwlock,
    return ret;
 }
 #if defined(VGO_linux)
+PTH_FUNC(int, pthreadZurwlockZutimedrdlock, // pthread_rwlock_timedrdlock
+              pthread_rwlock_t *rwlock,
+              const struct timespec *timeout) {
+   return pthread_rwlock_timedrdlock_WRK(rwlock, timeout);
+}
 #elif defined(VGO_darwin)
 #elif defined(VGO_freebsd)
 PTH_FUNC(int, pthreadZurwlockZutimedrdlock, // pthread_rwlock_timedrdlock
@@ -2837,7 +2941,7 @@ PTH_FUNC(int, pthreadZurwlockZutimedrdlock, // pthread_rwlock_timedrdlock
 #  error "Unsupported OS"
 #endif
 
-#if defined(VGO_linux)
+#if defined(VGO_linux) || defined(VGO_solaris)
 //-----------------------------------------------------------
 // glibc:   pthread_rwlock_clockrdlock
 //
@@ -2853,16 +2957,22 @@ static int pthread_rwlock_clockrdlock_WRK(pthread_rwlock_t *rwlock,
       fprintf(stderr, "<< pthread_rwl_clockrdl %p", rwlock); fflush(stderr);
    }
 
+   if (!in_pthread_rwlock_timedrdlock_WRK) {
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_PRE,
                  pthread_rwlock_t *, rwlock,
                  long, 0/*isW*/, long, 0/*isTryLock*/);
+   }
 
    CALL_FN_W_WWW(ret, fn, rwlock, clockid, timeout);
 
+   if (!in_pthread_rwlock_timedrdlock_WRK) {
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_POST,
                  pthread_rwlock_t *, rwlock, long, 0/*isW*/,
                  long, (ret == 0) ? True : False);
+   }
+
    if (ret != 0) {
+      if (ret != ETIMEDOUT)
       DO_PthAPIerror("pthread_rwlock_clockrdlock", ret);
    }
 
@@ -2880,10 +2990,10 @@ PTH_FUNC(int, pthreadZurwlockZuclockrdlock, // pthread_rwlock_clockrdlock
 }
 #endif
 
+static Bool in_pthread_rwlock_timedwrlock_WRK = False;
 
 //-----------------------------------------------------------
-// glibc:   Unhandled
-// darwin:  Unhandled
+// glibc:   pthread_rwlock_timedwrlock
 // Solaris: pthread_rwlock_timedwrlock
 // Solaris: pthread_rwlock_reltimedwrlock_np
 // FreeBSD: pthread_rwlock_timedwrlock
@@ -2903,7 +3013,9 @@ static int pthread_rwlock_timedwrlock_WRK(pthread_rwlock_t *rwlock,
                  pthread_rwlock_t *, rwlock,
                  long, 1/*isW*/, long, 0/*isTryLock*/);
 
+   in_pthread_rwlock_timedwrlock_WRK = True;
    CALL_FN_W_WW(ret, fn, rwlock, timeout);
+   in_pthread_rwlock_timedwrlock_WRK = False;
 
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_POST,
                  pthread_rwlock_t *, rwlock, long, 1/*isW*/,
@@ -2918,6 +3030,11 @@ static int pthread_rwlock_timedwrlock_WRK(pthread_rwlock_t *rwlock,
    return ret;
 }
 #if defined(VGO_linux)
+PTH_FUNC(int, pthreadZurwlockZutimedwrlock, // pthread_rwlock_timedwrlock
+              pthread_rwlock_t *rwlock,
+              const struct timespec *timeout) {
+   return pthread_rwlock_timedwrlock_WRK(rwlock, timeout);
+}
 #elif defined(VGO_darwin)
 #elif defined(VGO_freebsd)
 PTH_FUNC(int, pthreadZurwlockZutimedwrlock, // pthread_rwlock_timedwrlock
@@ -2946,9 +3063,10 @@ PTH_FUNC(int, pthreadZurwlockZutimedwrlock, // pthread_rwlock_timedwrlock
 #  error "Unsupported OS"
 #endif
 
-#if defined(VGO_linux)
+#if defined(VGO_linux) || defined(VGO_solaris)
 //-----------------------------------------------------------
 // glibc:   pthread_rwlock_clockwrlock
+// Illumos: pthread_rwlock_clockwrlock
 //
 __attribute__((noinline)) __attribute__((unused))
 static int pthread_rwlock_clockwrlock_WRK(pthread_rwlock_t *rwlock,
@@ -2962,15 +3080,19 @@ static int pthread_rwlock_clockwrlock_WRK(pthread_rwlock_t *rwlock,
       fprintf(stderr, "<< pthread_rwl_clockwrl %p", rwlock); fflush(stderr);
    }
 
+   if (!in_pthread_rwlock_timedwrlock_WRK) {
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_PRE,
                  pthread_rwlock_t *, rwlock,
                  long, 1/*isW*/, long, 0/*isTryLock*/);
+   }
 
    CALL_FN_W_WWW(ret, fn, rwlock, clockid, timeout);
 
+   if (!in_pthread_rwlock_timedwrlock_WRK) {
    DO_CREQ_v_WWW(_VG_USERREQ__HG_PTHREAD_RWLOCK_LOCK_POST,
                  pthread_rwlock_t *, rwlock, long, 1/*isW*/,
                  long, (ret == 0) ? True : False);
+   }
    if (ret != 0) {
       DO_PthAPIerror("pthread_rwlock_clockwrlock", ret);
    }
@@ -3044,7 +3166,7 @@ static int pthread_rwlock_unlock_WRK(pthread_rwlock_t* rwlock)
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZurwlockZuunlock, // pthread_rwlock_unlock
-                 pthread_rwlock_t* rwlock) {
+                 pthread_rwlock_t *rwlock) {
       return pthread_rwlock_unlock_WRK(rwlock);
    }
 #else
@@ -3122,7 +3244,8 @@ static int sem_init_WRK(sem_t* sem, int pshared, unsigned long value)
       return sem_init_WRK(sem, pshared, value);
    }
 #elif defined(VGO_darwin)
-   PTH_FUNC(int, semZuinit, // sem_init
+// exists but fails with ENOSYS function not implemented
+   LIBC_FUNC(int, semZuinit, // sem_init
                  sem_t* sem, int pshared, unsigned long value) {
       return sem_init_WRK(sem, pshared, value);
    }
@@ -3136,7 +3259,7 @@ static int sem_init_WRK(sem_t* sem, int pshared, unsigned long value)
                  sem_t* sem, int pshared, unsigned long value) {
       return sem_init_WRK(sem, pshared, value);
    }
-#else
+ #else
 #  error "Unsupported OS"
 #endif
 
@@ -3215,7 +3338,8 @@ static int sem_destroy_WRK(sem_t* sem)
       return sem_destroy_WRK(sem);
    }
 #elif defined(VGO_darwin)
-   PTH_FUNC(int, semZudestroy,  // sem_destroy
+// exists but fails with ENOSYS function not implemented
+   LIBC_FUNC(int, semZudestroy,  // sem_destroy
                  sem_t* sem) {
       return sem_destroy_WRK(sem);
    }
@@ -3231,7 +3355,7 @@ static int sem_destroy_WRK(sem_t* sem)
    }
 #elif defined(VGO_netbsd)
    PTH_FUNC(int, semZudestroy,  // sem_destroy
-                 sem_t* sem) {
+                 sem_t *sem) {
       return sem_destroy_WRK(sem);
    }
 #else
@@ -3288,10 +3412,11 @@ static int sem_wait_WRK(sem_t* sem)
       return sem_wait_WRK(sem);
    }
 #elif defined(VGO_darwin)
-   PTH_FUNC(int, semZuwait, sem_t* sem) { /* sem_wait */
+// exists but fails with EBADF bad file number
+   LIBC_FUNC(int, semZuwait, sem_t* sem) { /* sem_wait */
       return sem_wait_WRK(sem);
    }
-   PTH_FUNC(int, semZuwaitZDZa, sem_t* sem) { /* sem_wait$* */
+   LIBC_FUNC(int, semZuwaitZDZa, sem_t* sem) { /* sem_wait$* */
       return sem_wait_WRK(sem);
    }
 #elif defined(VGO_freebsd)
@@ -3306,10 +3431,186 @@ static int sem_wait_WRK(sem_t* sem)
    PTH_FUNC(int, semZuwait, sem_t* sem) { /* sem_wait */
       return sem_wait_WRK(sem);
    }
+#  error "Unsupported OS"
+#endif
+
+//-----------------------------------------------------------
+// glibc:   sem_trywait
+// glibc:   sem_trywait@GLIBC_2.0
+// glibc:   sem_trywait@@GLIBC_2.1
+// darwin:  sem_trywait
+// Solaris: sema_trywait (sem_teywait is built on top of sema_trywait)
+// FreeBSD: sem_trywait (libc)
+//
+/* trywait: decrement semaphore if non-zero otherwise return error */
+__attribute__((noinline))
+static int sem_trywait_WRK(sem_t* sem)
+{
+   OrigFn fn;
+   int    ret;
+   VALGRIND_GET_ORIG_FN(fn);
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, "<< sem_trywait(%p) ", sem);
+      fflush(stderr);
+   }
+
+   DO_CREQ_v_W(_VG_USERREQ__HG_POSIX_SEM_WAIT_PRE, sem_t*,sem);
+
+   CALL_FN_W_W(ret, fn, sem);
+
+   DO_CREQ_v_WW(_VG_USERREQ__HG_POSIX_SEM_WAIT_POST, sem_t*,sem,
+                long, (ret == 0) ? True : False);
+
+   if (ret != 0) {
+      DO_PthAPIerror( "sem_trywait", SEM_ERROR );
+   }
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, " sem_trywait -> %d >>\n", ret);
+      fflush(stderr);
+   }
+
+   return ret;
+}
+
+#if defined(VGO_linux)
+PTH_FUNC(int, semZutrywait, sem_t* sem) { /* sem_trywait */
+   return sem_trywait_WRK(sem);
+}
+PTH_FUNC(int, semZutrywaitZAZa, sem_t* sem) { /* sem_trywait@* */
+   return sem_trywait_WRK(sem);
+}
+#elif defined(VGO_darwin)
+LIBC_FUNC(int, semZutrywait, sem_t* sem) { /* sem_trywait */
+   return sem_trywait_WRK(sem);
+}
+#elif defined(VGO_freebsd)
+LIBC_FUNC(int, semZutrywait, sem_t* sem) { /* sem_trywait */
+   return sem_trywait_WRK(sem);
+}
+#elif defined(VGO_solaris)
+PTH_FUNC(int, semaZutrywait, sem_t *sem) { /* sema_trywait */
+   return sem_trywait_WRK(sem);
+   }
 #else
 #  error "Unsupported OS"
 #endif
 
+//-----------------------------------------------------------
+// glibc:   sem_timedwait
+// glibc:   sem_timedwait@GLIBC_2.0
+// glibc:   sem_timedwait@@GLIBC_2.1
+// darwin:  does not exist
+// Solaris: sema_timedwait (sem_timedwait is built on top of sema_timedwait)
+// FreeBSD: sem_timedwait (libc)
+//
+#if !defined(VGO_darwin)
+/* timedwait: decrement semaphore if non-zero otherwise wait for specified
+   time then return an error */
+__attribute__((noinline))
+static int sem_timedwait_WRK(sem_t* sem, const struct timespec* abs_timeout)
+{
+   OrigFn fn;
+   int    ret;
+   VALGRIND_GET_ORIG_FN(fn);
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, "<< sem_timedwait(%p, %p) ", sem, abs_timeout);
+      fflush(stderr);
+   }
+
+   DO_CREQ_v_W(_VG_USERREQ__HG_POSIX_SEM_WAIT_PRE, sem_t*,sem);
+
+   CALL_FN_W_WW(ret, fn, sem, abs_timeout);
+
+   DO_CREQ_v_WW(_VG_USERREQ__HG_POSIX_SEM_WAIT_POST, sem_t*,sem,
+                long, (ret == 0) ? True : False);
+
+   if (ret != 0) {
+      DO_PthAPIerror( "sem_timedwait", SEM_ERROR );
+   }
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, " sem_timedwait -> %d >>\n", ret);
+      fflush(stderr);
+   }
+
+   return ret;
+}
+
+#if defined(VGO_linux)
+PTH_FUNC(int, semZutimedwait, sem_t* sem, const struct timespec* abs_timeout) { /* sem_timedwait */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
+PTH_FUNC(int, semZutimedwaitZAZa, sem_t* sem, const struct timespec* abs_timeout) { /* sem_timedwait@* */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
+#elif defined(VGO_freebsd)
+LIBC_FUNC(int, semZutimedwait, sem_t* sem, const struct timespec* abs_timeout) { /* sem_timedwait */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
+#elif defined(VGO_solaris)
+PTH_FUNC(int, semaZutimedwait, sem_t *sem, const struct timespec* abs_timeout) { /* sema_timedwait */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
+#if defined(__illumos__)
+PTH_FUNC(int, semZutimedwait, sem_t *sem, const struct timespec* abs_timeout) { /* sem_timedwait */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
+#endif
+#else
+#  error "Unsupported OS"
+#endif
+#endif // not VGO_darwin
+
+//-----------------------------------------------------------
+// glibc:   does not exist
+// darwin:  does not exist
+// Solaris: does not exist
+// FreeBSD: sem_clockwait_np (libc)
+//
+/* clockwait_np: decrement semaphore if non-zero otherwise wait for specified
+   time then return an error with a flag to select the kind of clock and
+   a timespec for the remaining time */
+#if defined (VGO_freebsd)
+__attribute__((noinline))
+static int sem_clockwait_np_WRK(sem_t* sem, clockid_t clock_id, int flags,
+                                const struct timespec * rqtp, struct timespec * rmtp)
+{
+   OrigFn fn;
+   int    ret;
+   VALGRIND_GET_ORIG_FN(fn);
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, "<< sem_clockwait_np(%p, %d, %d, %p, %p) ", sem, clock_id, flags, rqtp, rmtp);
+      fflush(stderr);
+   }
+
+   DO_CREQ_v_W(_VG_USERREQ__HG_POSIX_SEM_WAIT_PRE, sem_t*,sem);
+
+   CALL_FN_W_5W(ret, fn, sem, clock_id, flags, rqtp, rmtp);
+
+   DO_CREQ_v_WW(_VG_USERREQ__HG_POSIX_SEM_WAIT_POST, sem_t*,sem,
+                long, (ret == 0) ? True : False);
+
+   if (ret != 0) {
+      DO_PthAPIerror( "sem_clockwait_np", SEM_ERROR );
+   }
+
+   if (TRACE_SEM_FNS) {
+      fprintf(stderr, " sem_clockwait_np -> %d >>\n", ret);
+      fflush(stderr);
+   }
+
+   return ret;
+}
+
+LIBC_FUNC(int, semZuclockwaitZunp, sem_t* sem, clockid_t clock_id, int flags,
+          const struct timespec * rqtp, struct timespec * rmtp) { /* sem_clockwait_np */
+   return sem_clockwait_np_WRK(sem, clock_id, flags, rqtp, rmtp);
+}
+#endif
 
 //-----------------------------------------------------------
 // glibc:   sem_post
@@ -3358,7 +3659,7 @@ static int sem_post_WRK(sem_t* sem)
       return sem_post_WRK(sem);
    }
 #elif defined(VGO_darwin)
-   PTH_FUNC(int, semZupost, sem_t* sem) { /* sem_post */
+   LIBC_FUNC(int, semZupost, sem_t* sem) { /* sem_post */
       return sem_post_WRK(sem);
    }
 #elif defined(VGO_freebsd)
@@ -3384,7 +3685,7 @@ static int sem_post_WRK(sem_t* sem)
 // Solaris: sem_open
 // FreeBSD: sem_open
 //
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_DARWIN)
 LIBC_FUNC(sem_t*, semZuopen,
                  const char* name, long oflag,
                  long mode, unsigned long value)
@@ -3401,7 +3702,7 @@ PTH_FUNC(sem_t*, semZuopen,
 
    if (TRACE_SEM_FNS) {
       fprintf(stderr, "<< sem_open(\"%s\",%ld,%lx,%lu) ",
-                      name,oflag,mode,value);
+                      name,oflag,(unsigned long)mode,value);
       fflush(stderr);
    }
 
@@ -3429,7 +3730,7 @@ PTH_FUNC(sem_t*, semZuopen,
 // darwin:  sem_close
 // Solaris: sem_close
 // FreeBSD: sem_close
-#if defined (VGO_freebsd)
+#if defined (VGO_freebsd) || defined(VGO_darwin)
 LIBC_FUNC(int, sem_close, sem_t* sem)
 #else
 PTH_FUNC(int, sem_close, sem_t* sem)
@@ -3641,7 +3942,7 @@ static long QMutex_tryLock_WRK(void* self)
                 void *, self, long, (ret & 0xFF) ? True : False);
 
    if (TRACE_QT4_FNS) {
-      fprintf(stderr, " :: Q::tryLock -> %lu >>\n", ret);
+      fprintf(stderr, " :: Q::tryLock -> %ld >>\n", ret);
    }
    
    return ret;
@@ -3678,7 +3979,7 @@ static long QMutex_tryLock_int_WRK(void* self, long arg2)
                void *, self, long, (ret & 0xFF) ? True : False);
 
    if (TRACE_QT4_FNS) {
-      fprintf(stderr, " :: Q::tryLock(int) -> %lu >>\n", ret);
+      fprintf(stderr, " :: Q::tryLock(int) -> %ld >>\n", ret);
    }
    
    return ret;

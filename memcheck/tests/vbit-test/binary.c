@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -363,6 +363,38 @@ check_result_for_binary(const irop_t *op, const test_data_t *data)
          fprintf(stderr, "ERROR, unknown Iop for UNDEF_NARROW256_AtoB\n");
          panic(__func__);
       }
+      break;
+   case UNDEF_GT_S_8x16:
+      expected_vbits = cmp_gt_vbits(1/* is_signed */, 8 /* bits_per_element */, 16 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_S_16x8:
+      expected_vbits = cmp_gt_vbits(1/* is_signed */, 16 /* bits_per_element */, 8 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_S_32x4:
+      expected_vbits = cmp_gt_vbits(1/* is_signed */, 32 /* bits_per_element */, 4 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_S_64x2:
+      expected_vbits = cmp_gt_vbits(1/* is_signed */, 64 /* bits_per_element */, 2 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_U_8x16:
+      expected_vbits = cmp_gt_vbits(0/* is_signed */, 8 /* bits_per_element */, 16 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_U_16x8:
+      expected_vbits = cmp_gt_vbits(0/* is_signed */, 16 /* bits_per_element */, 8 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_U_32x4:
+      expected_vbits = cmp_gt_vbits(0/* is_signed */, 32 /* bits_per_element */, 4 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
+      break;
+   case UNDEF_GT_U_64x2:
+      expected_vbits = cmp_gt_vbits(0/* is_signed */, 64 /* bits_per_element */, 2 /* element_count */,
+                                    opnd1->vbits, opnd2->vbits, opnd1->value, opnd2->value);
       break;
 
    default:

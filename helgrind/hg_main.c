@@ -15,7 +15,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -165,6 +165,7 @@ Bool HG_(clo_ignore_thread_creation) = True;
 #else
 Bool HG_(clo_ignore_thread_creation) = False;
 #endif /* VGO_solaris */
+Bool HG_(clo_check_cond_signal_mutex) = False;
 
 static
 ThreadId map_threads_maybe_reverse_lookup_SLOW ( Thread* thr ); /*fwds*/
@@ -685,7 +686,7 @@ static ThreadId map_threads_maybe_reverse_lookup_SLOW ( Thread* thr )
    ThreadId tid;
    tl_assert(HG_(is_sane_Thread)(thr));
    /* Check nobody used the invalid-threadid slot */
-   tl_assert(VG_INVALID_THREADID >= 0 && VG_INVALID_THREADID < VG_N_THREADS);
+   tl_assert(VG_INVALID_THREADID < VG_N_THREADS);
    tl_assert(map_threads[VG_INVALID_THREADID] == NULL);
    tid = thr->coretid;
    tl_assert(HG_(is_sane_ThreadId)(tid));
@@ -715,17 +716,24 @@ static void map_threads_delete ( ThreadId coretid )
 
 static void HG_(thread_enter_synchr)(Thread *thr) {
    tl_assert(thr->synchr_nesting >= 0);
-#if defined(VGO_solaris)
+#if defined(VGO_solaris) || defined(VGO_freebsd)
    thr->synchr_nesting += 1;
 #endif /* VGO_solaris */
 }
 
 static void HG_(thread_leave_synchr)(Thread *thr) {
-#if defined(VGO_solaris)
+#if defined(VGO_solaris) || defined(VGO_freebsd)
    thr->synchr_nesting -= 1;
 #endif /* VGO_solaris */
    tl_assert(thr->synchr_nesting >= 0);
 }
+
+#if defined(VGO_freebsd)
+static Int HG_(get_pthread_synchr_nesting_level)(ThreadId tid) {
+   Thread *thr = map_threads_maybe_lookup(tid);
+   return thr->synchr_nesting;
+}
+#endif
 
 static void HG_(thread_enter_pthread_create)(Thread *thr) {
    tl_assert(thr->pthread_create_nesting_level >= 0);
@@ -2447,8 +2455,8 @@ static void evh__HG_PTHREAD_COND_SIGNAL_PRE ( ThreadId tid, void* cond )
             HG_(record_error_Misc)(thr,
                "pthread_cond_{signal,broadcast}: associated lock is a rwlock");
          }
-         if (lk->heldBy == NULL) {
-            HG_(record_error_Misc)(thr,
+         if (HG_(clo_check_cond_signal_mutex) && lk->heldBy == NULL) {
+            HG_(record_error_Dubious)(thr,
                "pthread_cond_{signal,broadcast}: dubious: "
                "associated lock is not held by any thread");
          }
@@ -3328,7 +3336,7 @@ static void evh__HG_PTHREAD_BARRIER_RESIZE_PRE ( ThreadId tid,
          the barrier, so need to mess with dep edges in the same way
          as if the barrier had filled up normally. */
       present = VG_(sizeXA)(bar->waiting);
-      tl_assert(present >= 0 && present <= bar->size);
+      tl_assert(present <= bar->size);
       if (newcount <= present) {
          bar->size = present; /* keep the cross_sync call happy */
          do_barrier_cross_sync_and_empty(bar);
@@ -3625,9 +3633,9 @@ static void univ_laog_do_GC ( void ) {
    links = NULL;
    while (VG_(nextIterFM)( laog, NULL, (UWord*)&links )) {
       tl_assert(links);
-      tl_assert(links->inns >= 0 && links->inns < univ_laog_cardinality);
+      tl_assert(links->inns < univ_laog_cardinality);
       univ_laog_seen[links->inns] = True;
-      tl_assert(links->outs >= 0 && links->outs < univ_laog_cardinality);
+      tl_assert(links->outs < univ_laog_cardinality);
       univ_laog_seen[links->outs] = True;
       links = NULL;
    }
@@ -4237,7 +4245,7 @@ static void* hg_cli____builtin_new ( ThreadId tid, SizeT n ) {
    return handle_alloc ( tid, n, VG_(clo_alignment),
                          /*is_zeroed*/False );
 }
-static void* hg_cli____builtin_new_aligned ( ThreadId tid, SizeT n, SizeT align ) {
+static void* hg_cli____builtin_new_aligned ( ThreadId tid, SizeT n, SizeT align, SizeT orig_align ) {
    if (((SSizeT)n) < 0) return NULL;
    return handle_alloc ( tid, n, align,
                          /*is_zeroed*/False );
@@ -4247,12 +4255,12 @@ static void* hg_cli____builtin_vec_new ( ThreadId tid, SizeT n ) {
    return handle_alloc ( tid, n, VG_(clo_alignment), 
                          /*is_zeroed*/False );
 }
-static void* hg_cli____builtin_vec_new_aligned ( ThreadId tid, SizeT n, SizeT align ) {
+static void* hg_cli____builtin_vec_new_aligned ( ThreadId tid, SizeT n, SizeT align, SizeT orig_align ) {
    if (((SSizeT)n) < 0) return NULL;
    return handle_alloc ( tid, n, align,
                          /*is_zeroed*/False );
 }
-static void* hg_cli__memalign ( ThreadId tid, SizeT align, SizeT n ) {
+static void* hg_cli__memalign ( ThreadId tid, SizeT align, SizeT orig_alignT, SizeT n ) {
    if (((SSizeT)n) < 0) return NULL;
    return handle_alloc ( tid, n, align, 
                          /*is_zeroed*/False );
@@ -4323,11 +4331,30 @@ static void* hg_cli__realloc ( ThreadId tid, void* payloadV, SizeT new_size )
 
    if (((SSizeT)new_size) < 0) return NULL;
 
+   if (payloadV == NULL) {
+      return handle_alloc ( tid, new_size, VG_(clo_alignment),
+                            /*is_zeroed*/False );
+   }
+
    md = (MallocMeta*) VG_(HT_lookup)( hg_mallocmeta_table, (UWord)payload );
    if (!md)
       return NULL; /* apparently realloc-ing a bogus address.  Oh well. */
   
    tl_assert(md->payload == payload);
+
+   if (new_size == 0U ) {
+      if (VG_(clo_realloc_zero_bytes_frees) == True) {
+         md_tmp = VG_(HT_remove)( hg_mallocmeta_table, payload );
+         tl_assert(md_tmp);
+         tl_assert(md_tmp == md);
+
+         VG_(cli_free)((void*)md->payload);
+         delete_MallocMeta(md);
+
+         return NULL;
+      }
+      new_size = 1U;
+   }
 
    if (md->szB == new_size) {
       /* size unchanged */
@@ -5291,7 +5318,7 @@ Bool hg_handle_client_request ( ThreadId tid, UWord* args, UWord* ret)
 
          gnat_dmmls_INIT();
          /* Similar loop as for master completed hook below, but stops at
-            the first matching occurence, only comparing master and
+            the first matching occurrence, only comparing master and
             dependent. */
          for (n = VG_(sizeXA) (gnat_dmmls) - 1; n >= 0; n--) {
             GNAT_dmml *dmml = (GNAT_dmml*) VG_(indexXA)(gnat_dmmls, n);
@@ -5354,6 +5381,11 @@ Bool hg_handle_client_request ( ThreadId tid, UWord* args, UWord* ret)
          map_pthread_t_to_Thread_INIT();
          my_thr = map_threads_maybe_lookup( tid );
          tl_assert(my_thr); /* See justification above in SET_MY_PTHREAD_T */
+#if defined(VGO_freebsd)
+         if (HG_(get_pthread_synchr_nesting_level)(tid) >= 1) {
+            break;
+         }
+#endif
          HG_(record_error_PthAPIerror)(
             my_thr, (HChar*)args[1], (UWord)args[2], (HChar*)args[3] );
          break;
@@ -5584,8 +5616,13 @@ Bool hg_handle_client_request ( ThreadId tid, UWord* args, UWord* ret)
          break;
 
       case _VG_USERREQ__HG_POSIX_SEM_WAIT_POST: /* sem_t*, long tookLock */
+#if defined(VGO_freebsd)
+      if (args[2] == True && HG_(get_pthread_synchr_nesting_level)(tid) == 1)
+         evh__HG_POSIX_SEM_WAIT_POST( tid, (void*)args[1] );
+#else
          if (args[2] == True)
             evh__HG_POSIX_SEM_WAIT_POST( tid, (void*)args[1] );
+#endif
          HG_(thread_leave_synchr)(map_threads_maybe_lookup(tid));
          break;
 
@@ -5728,8 +5765,10 @@ Bool hg_handle_client_request ( ThreadId tid, UWord* args, UWord* ret)
 
       default:
          /* Unhandled Helgrind client request! */
-         tl_assert2(0, "unhandled Helgrind client request 0x%lx",
-                       args[0]);
+         VG_(message)(Vg_UserMsg,
+                      "Warning: unknown Helgrind client request code %llx\n",
+                      (ULong)args[0]);
+         return False;
    }
 
    return True;
@@ -5756,6 +5795,11 @@ static Bool hg_process_cmd_line_option ( const HChar* arg )
    else if VG_XACT_CLO(arg, "--history-level=full",
                             HG_(clo_history_level), 2);
 
+   else if VG_BINT_CLO(arg, "--history-backtrace-size",
+                       HG_(clo_history_backtrace_size), 2, 500) {}
+   // 500 just in case someone with a lot of CPU and memory would like to use
+   // the same value for --num-callers and this.
+
    else if VG_BOOL_CLO(arg, "--delta-stacktrace",
                             HG_(clo_delta_stacktrace)) {}
 
@@ -5765,9 +5809,9 @@ static Bool hg_process_cmd_line_option ( const HChar* arg )
    /* "stuvwx" --> stuvwx (binary) */
    else if VG_STR_CLO(arg, "--hg-sanity-flags", tmp_str) {
       Int j;
-   
+
       if (6 != VG_(strlen)(tmp_str)) {
-         VG_(message)(Vg_UserMsg, 
+         VG_(message)(Vg_UserMsg,
                       "--hg-sanity-flags argument must have 6 digits\n");
          return False;
       }
@@ -5797,8 +5841,9 @@ static Bool hg_process_cmd_line_option ( const HChar* arg )
                             HG_(clo_check_stack_refs)) {}
    else if VG_BOOL_CLO(arg, "--ignore-thread-creation",
                             HG_(clo_ignore_thread_creation)) {}
-
-   else 
+   else if VG_BOOL_CLO(arg, "--check-cond-signal-mutex",
+                            HG_(clo_check_cond_signal_mutex)) {}
+   else
       return VG_(replacement_malloc_process_cmd_line_option)(arg);
 
    return True;
@@ -5813,15 +5858,22 @@ static void hg_print_usage ( void )
 "       full:   show both stack traces for a data race (can be very slow)\n"
 "       approx: full trace for one thread, approx for the other (faster)\n"
 "       none:   only show trace for one thread in a race (fastest)\n"
+"    --history-backtrace-size=<number>  record <number> callers for full\n"
+"        history level [8]\n"
 "    --delta-stacktrace=no|yes [yes on linux amd64/x86]\n"
-"        no : always compute a full history stacktrace from unwind info\n"
-"        yes : derive a stacktrace from the previous stacktrace\n"
+"        no: always compute a full history stacktrace from unwind info\n"
+"        yes: derive a stacktrace from the previous stacktrace\n"
 "          if there was no call/return or similar instruction\n"
 "    --conflict-cache-size=N   size of 'full' history cache [2000000]\n"
 "    --check-stack-refs=no|yes race-check reads and writes on the\n"
 "                              main stack and thread stacks? [yes]\n"
 "    --ignore-thread-creation=yes|no Ignore activities during thread\n"
-"                              creation [%s]\n",
+"                              creation [%s]\n"""
+"    --check-cond-signal-mutex=yes|no [no]\n"
+"        no: do not check that the associated mutex is locked for calls\n"
+"          to pthread_cond_{signal,broadcast}\n"
+"        yes: generate 'dubious' error messages if the associated mutex\n"
+"          is unlocked\n",
 HG_(clo_ignore_thread_creation) ? "yes" : "no"
    );
 }
@@ -6010,7 +6062,7 @@ static void hg_pre_clo_init ( void )
    VG_(details_version)         (NULL);
    VG_(details_description)     ("a thread error detector");
    VG_(details_copyright_author)(
-      "Copyright (C) 2007-2017, and GNU GPL'd, by OpenWorks LLP et al.");
+      "Copyright (C) 2007-2024, and GNU GPL'd, by OpenWorks LLP et al.");
    VG_(details_bug_reports_to)  (VG_BUGS_TO);
    VG_(details_avg_translation_sizeB) ( 320 );
 
@@ -6018,7 +6070,7 @@ static void hg_pre_clo_init ( void )
                                    hg_instrument,
                                    hg_fini);
 
-   VG_(needs_core_errors)         ();
+   VG_(needs_core_errors)         (True);
    VG_(needs_tool_errors)         (HG_(eq_Error),
                                    HG_(before_pp_Error),
                                    HG_(pp_Error),

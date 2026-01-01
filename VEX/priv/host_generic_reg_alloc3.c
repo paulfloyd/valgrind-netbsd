@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -148,8 +148,9 @@ typedef
    }
    RRegLRState;
 
-#define IS_VALID_VREGNO(v) ((v) >= 0 && (v) < n_vregs)
-#define IS_VALID_RREGNO(r) ((r) >= 0 && (r) < n_rregs)
+/* v and r are always unsigned, wish we could static assert that */
+#define IS_VALID_VREGNO(v) ((v) < n_vregs)
+#define IS_VALID_RREGNO(r) ((r) < n_rregs)
 
 #define FREE_VREG(v)             \
    do {                          \

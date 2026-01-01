@@ -11,8 +11,6 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include "pub_tool_vkiscnums.h"
-
 #define VG_STRINGIFZ(__str)  #__str
 #define VG_STRINGIFY(__str)  VG_STRINGIFZ(__str)
 

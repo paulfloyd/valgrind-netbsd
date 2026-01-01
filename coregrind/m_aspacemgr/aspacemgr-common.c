@@ -14,7 +14,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -157,7 +157,8 @@ SysRes VG_(am_do_mmap_NO_NOTIFY)( Addr start, SizeT length, UInt prot,
 #  elif defined(VGP_amd64_linux) \
         || defined(VGP_ppc64be_linux)  || defined(VGP_ppc64le_linux) \
         || defined(VGP_s390x_linux) || defined(VGP_mips32_linux) \
-        || defined(VGP_mips64_linux) || defined(VGP_arm64_linux)
+        || defined(VGP_mips64_linux) || defined(VGP_arm64_linux) \
+        || defined(VGP_riscv64_linux)
    res = VG_(do_syscall6)(__NR_mmap, (UWord)start, length, 
                          prot, flags, fd, offset);
 #  elif defined(VGP_x86_darwin)
@@ -177,7 +178,7 @@ SysRes VG_(am_do_mmap_NO_NOTIFY)( Addr start, SizeT length, UInt prot,
       fd = -1;
    res = VG_(do_syscall7)(__NR_mmap, (UWord)start, length,
 			  prot, flags, fd, offset, offset >> 32ul);
-#  elif defined(VGP_amd64_freebsd)
+#  elif defined(VGP_amd64_freebsd) || defined(VGP_arm64_freebsd)
    if ((flags & VKI_MAP_ANONYMOUS) && fd == 0)
       fd = -1;
    res = VG_(do_syscall6)(__NR_mmap, (UWord)start, length,
@@ -194,12 +195,6 @@ SysRes VG_(am_do_mmap_NO_NOTIFY)( Addr start, SizeT length, UInt prot,
       fd = -1;
    res = VG_(do_syscall6)(__NR_mmap, (UWord)start, length, prot, flags,
                           (UInt)fd, offset);
-#  elif defined(VGP_amd64_netbsd)
-   /* MAP_ANON with fd!=-1 is EINVAL. */
-   if (fd != -1 && (flags & VKI_MAP_ANONYMOUS))
-       fd = -1;
-   res = VG_(do_syscall7)(__NR_mmap, (UWord)start, length, prot, flags,
-                          (UInt)fd, 0, offset);
 #  else
 #    error Unknown platform
 #  endif
@@ -229,22 +224,13 @@ SysRes ML_(am_do_extend_mapping_NO_NOTIFY)(
    /* Extend the mapping old_addr .. old_addr+old_len-1 to have length
       new_len, WITHOUT moving it.  If it can't be extended in place,
       fail. */
-#  if defined(VGO_linux)
+#  if defined(VGO_linux) || defined(VGO_solaris)
    return VG_(do_syscall5)(
              __NR_mremap, 
              old_addr, old_len, new_len, 
              0/*flags, meaning: must be at old_addr, else FAIL */,
              0/*new_addr, is ignored*/
           );
-
-#  elif defined(VGO_netbsd)
-   return VG_(do_syscall5)(
-             __NR_mremap,
-             old_addr, old_len,
-             old_addr, new_len, /* request the same base address */
-             VKI_MAP_FIXED /* flags, meaning: must be at old_addr, else FAIL */
-          );
-
 #  else
 #    error Unknown OS
 #  endif
@@ -259,20 +245,12 @@ SysRes ML_(am_do_relocate_nooverlap_mapping_NO_NOTIFY)(
       location and with the new length.  Only needs to handle the case
       where the two areas do not overlap, neither length is zero, and
       all args are page aligned. */
-#  if defined(VGO_linux)
+#  if defined(VGO_linux) || defined(VGO_solaris)
    return VG_(do_syscall5)(
              __NR_mremap, 
              old_addr, old_len, new_len, 
              VKI_MREMAP_MAYMOVE|VKI_MREMAP_FIXED/*move-or-fail*/,
              new_addr
-          );
-
-#  elif defined(VGO_netbsd)
-   return VG_(do_syscall5)(
-             __NR_mremap,
-             old_addr, old_len,
-             new_addr, new_len,
-             VKI_MAP_FIXED /* move-or-fail */
           );
 #  else
 #    error Unknown OS
@@ -285,13 +263,13 @@ SysRes ML_(am_do_relocate_nooverlap_mapping_NO_NOTIFY)(
 
 SysRes ML_(am_open) ( const HChar* pathname, Int flags, Int mode )
 {
-#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux)
-   /* ARM64 wants to use __NR_openat rather than __NR_open. */
+#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
+      || defined(VGP_riscv64_linux)
+   /* More recent Linux platforms have only __NR_openat and no __NR_open. */
    SysRes res = VG_(do_syscall4)(__NR_openat,
                                  VKI_AT_FDCWD, (UWord)pathname, flags, mode);
-#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    SysRes res = VG_(do_syscall3)(__NR_open, (UWord)pathname, flags, mode);
-
 #  elif defined(VGO_solaris)
    SysRes res = VG_(do_syscall4)(__NR_openat, VKI_AT_FDCWD, (UWord)pathname,
                                  flags, mode);
@@ -315,12 +293,12 @@ void ML_(am_close) ( Int fd )
 Int ML_(am_readlink)(const HChar* path, HChar* buf, UInt bufsiz)
 {
    SysRes res;
-#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux)
+#  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
+      || defined(VGP_riscv64_linux)
    res = VG_(do_syscall4)(__NR_readlinkat, VKI_AT_FDCWD,
                                            (UWord)path, (UWord)buf, bufsiz);
-#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
    res = VG_(do_syscall3)(__NR_readlink, (UWord)path, (UWord)buf, bufsiz);
-
 #  elif defined(VGO_solaris)
    res = VG_(do_syscall4)(__NR_readlinkat, VKI_AT_FDCWD, (UWord)path,
                           (UWord)buf, bufsiz);
@@ -332,7 +310,7 @@ Int ML_(am_readlink)(const HChar* path, HChar* buf, UInt bufsiz)
 
 Int ML_(am_fcntl) ( Int fd, Int cmd, Addr arg )
 {
-#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
 #  if defined(VGP_nanomips_linux)
    SysRes res = VG_(do_syscall3)(__NR_fcntl64, fd, cmd, arg);
 #  else
@@ -340,9 +318,8 @@ Int ML_(am_fcntl) ( Int fd, Int cmd, Addr arg )
 #  endif
 #  elif defined(VGO_darwin)
    SysRes res = VG_(do_syscall3)(__NR_fcntl_nocancel, fd, cmd, arg);
-
 #  else
-#    error "Unknown OS"
+#  error "Unknown OS"
 #  endif
    return sr_isError(res) ? -1 : sr_Res(res);
 }
@@ -412,31 +389,24 @@ Bool ML_(am_get_fd_d_i_m)( Int fd,
    }
    return False;
 #  elif defined(VGO_freebsd)
+#if (__FreeBSD_version < 1200031)
    struct vki_freebsd11_stat buf;
-#if (FREEBSD_VERS >= FREEBSD_12)
-   SysRes res = VG_(do_syscall2)(__NR_freebsd11_fstat, fd, (UWord)&buf);
+   SysRes res = VG_(do_syscall2)(__NR_fstat, fd, (UWord)&buf);
 #else
+   struct vki_stat buf;
    SysRes res = VG_(do_syscall2)(__NR_fstat, fd, (UWord)&buf);
 #endif
    if (!sr_isError(res)) {
-      *dev  = (ULong)buf.st_dev;
+      /*
+       * This gets compared to the value obtained by sysctl KERN_PROC_VMMAP.
+       * For some reson that only uses 32bits, so truncate this to match
+       */
+      *dev  = (UInt)buf.st_dev;
       *ino  = (ULong)buf.st_ino;
       *mode = (UInt) buf.st_mode;
       return True;
    }
    return False;
-
-#  elif defined(VGO_netbsd)
-   struct vki_stat buf;
-   SysRes res = VG_(do_syscall2)(__NR_fstat, fd, (UWord)&buf);
-   if (!sr_isError(res)) {
-      *dev  = (ULong)buf.st_dev;
-      *ino  = (ULong)buf.st_ino;
-      *mode = (UInt) buf.st_mode;
-      return True;
-   }
-   return False;
-
 #  else
 #    error Unknown OS
 #  endif
@@ -449,7 +419,7 @@ static Char filedesc_buf[M_FILEDESC_BUF];
    
 Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
 {
-#if defined(HAVE_SYMLINKS_IN_PROC_SELF_FD)
+#if defined(VGO_linux)
    Int i;
    HChar tmp[64];    // large enough
    for (i = 0; i < nbuf; i++) buf[i] = 0;
@@ -460,6 +430,9 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
       return False;
 
 #elif defined(VGO_freebsd)
+
+
+#if (1)
    Int mib[4];
    SysRes sres;
    vki_size_t len;
@@ -482,16 +455,30 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    eb = filedesc_buf + len;
    while (bp < eb) {
       kf = (struct vki_kinfo_file *)bp;
-      if (kf->kf_fd == fd)
+      if (kf->vki_kf_fd == fd)
          break;
-      bp += kf->kf_structsize;
+      bp += kf->vki_kf_structsize;
    }
-   if (bp >= eb || *kf->kf_path == '\0')
+   if (bp >= eb || *kf->vki_kf_path == '\0')
      VG_(strncpy)( buf, "[unknown]", nbuf );
    else
-     VG_(strncpy)( buf, kf->kf_path, nbuf );
+     VG_(strncpy)( buf, kf->vki_kf_path, nbuf );
    return True;
-#elif HAVE_DECL_F_GETPATH
+#else
+   // PJF it will be a relief to get rid of the above bit of ugliness
+   struct vki_kinfo_file kinfo_file;
+   kinfo_file.vki_kf_structsize = VKI_KINFO_FILE_SIZE;
+   if (0 == ML_(am_fcntl) ( fd, VKI_F_KINFO, (Addr)&kinfo_file )) {
+      if (nbuf > 0) {
+         VG_(strncpy)( buf, kinfo_file.vki_kf_path, nbuf < VKI_PATH_MAX ? nbuf : VKI_PATH_MAX );
+         buf[nbuf-1] = 0;
+      }
+      if (buf[0] == '/') return True;
+   }
+   return False;
+#endif
+
+#elif defined(VGO_darwin)
    HChar tmp[VKI_MAXPATHLEN+1];
    if (0 == ML_(am_fcntl)(fd, VKI_F_GETPATH, (UWord)tmp)) {
       if (nbuf > 0) {
@@ -502,7 +489,7 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    }
    return False;
 
-#elif defined(HAVE_SYMLINKS_IN_PROC_SELF_PATH)
+#elif defined(VGO_solaris)
    Int i;
    HChar tmp[64];
    for (i = 0; i < nbuf; i++) buf[i] = 0;
@@ -512,20 +499,9 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    else
       return False;
 
-#else
-   /* On this platform the only way to resolve a file name is to
-    * lookup it in our recorded fd table. /proc/self/fd/# might exist
-    * but even if they do they are (sort of) hard links, not symlinks.
-    */
-   const HChar *rec = VG_(find_fd_recorded_by_fd)(fd);
-   if (rec) {
-      VG_(strncpy)(buf, rec, nbuf);
-      return True;
-   }
-   else {
-      return False;
-   }
-#endif
+#  else
+#     error Unknown OS
+#  endif
 }
 
 

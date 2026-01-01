@@ -5,7 +5,7 @@
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
-  published by the Free Software Foundation; either version 2 of the
+  published by the Free Software Foundation; either version 3 of the
   License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful, but
@@ -72,7 +72,7 @@ void DRD_(vc_init)(VectorClock* const vc,
                    const VCElem* const vcelem,
                    const unsigned size);
 void DRD_(vc_cleanup)(VectorClock* const vc);
-void DRD_(vc_copy)(VectorClock* const new, const VectorClock* const rhs);
+void DRD_(vc_copy)(VectorClock* const obj, const VectorClock* const rhs);
 void DRD_(vc_assign)(VectorClock* const lhs, const VectorClock* const rhs);
 void DRD_(vc_increment)(VectorClock* const vc, DrdThreadId const tid);
 static __inline__

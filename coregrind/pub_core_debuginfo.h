@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -76,6 +76,16 @@ extern void VG_(di_notify_pdb_debuginfo)( Int fd, Addr avma,
 extern void VG_(di_notify_vm_protect)( Addr a, SizeT len, UInt prot );
 #endif
 
+#if defined(VGO_darwin) && DARWIN_VERS >= DARWIN_11_00
+extern ULong VG_(di_notify_dsc)( const HChar* path, Addr header, SizeT len );
+#endif
+
+extern void VG_(addr_load_di)( Addr a );
+
+extern void VG_(di_load_di)( DebugInfo *di );
+
+extern void VG_(load_di)( DebugInfo *di, Addr a );
+
 extern void VG_(di_discard_ALL_debuginfo)( void );
 
 /* Like VG_(get_fnname), but it does not do C++ demangling nor Z-demangling
@@ -131,6 +141,10 @@ typedef
 typedef
    struct { Addr pc; Addr sp; Addr fp; Addr ra; }
    D3UnwindRegs;
+#elif defined(VGA_riscv64)
+typedef
+   struct { Addr pc; Addr sp; Addr fp; Addr ra; }
+   D3UnwindRegs;
 #else
 #  error "Unsupported arch"
 #endif
@@ -146,6 +160,15 @@ extern Bool VG_(use_CF_info) ( /*MOD*/D3UnwindRegs* uregs,
    info (e.g. CFI info or FPO info or ...). */
 extern UInt VG_(debuginfo_generation) (void);
 
+#if defined(VGO_freebsd)
+/* Force completion of loading all debuginfo.
+    Needed on FreeBSD when entering capability mode since
+    we can't open executable files to get the debuginfo after
+    entering capability mode. */
+extern void VG_(load_all_debuginfo) (void);
+/* Get the size of .data for the client exe */
+extern SizeT VG_(data_size)(void);
+#endif
 
 
 /* True if some FPO information is loaded.

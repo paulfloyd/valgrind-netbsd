@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -131,12 +131,7 @@ CORE_ADDR get_pc (void)
 static
 void set_pc (CORE_ADDR newpc)
 {
-   Bool mod;
-   supply_register_by_name ("pc", &newpc, &mod);
-   if (mod)
-      dlog(1, "set pc to %p\n", C2v (newpc));
-   else
-      dlog(1, "set pc not changed %p\n", C2v (newpc));
+   supply_register_by_name ("pc", &newpc);
 }
 
 /* These are the fields of 32 bit mips instructions. */
@@ -370,8 +365,8 @@ static CORE_ADDR** target_get_dtv (ThreadState *tst)
 
 static struct valgrind_target_ops low_target = {
    num_regs,
-   regs,
    29, //sp = r29, which is register offset 29 in regs
+   regs,
    transfer_register,
    get_pc,
    set_pc,

@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License as
-   published by the Free Software Foundation; either version 2 of the
+   published by the Free Software Foundation; either version 3 of the
    License, or (at your option) any later version.
 
    This program is distributed in the hope that it will be useful, but
@@ -87,6 +87,9 @@ static void usage_NORETURN ( int need_help )
 "\n"
 "  tool-selection option, with default in [ ]:\n"
 "    --tool=<name>             use the Valgrind tool named <name> [memcheck]\n"
+"                              available tools are:\n"
+"                              memcheck cachegrind callgrind helgrind drd\n"
+"                              massif dhat lackey none exp-bbv\n"
 "\n"
 "  basic user options for all Valgrind tools, with defaults in [ ]:\n"
 "    -h --help                 show this message\n"
@@ -109,13 +112,22 @@ static void usage_NORETURN ( int need_help )
 "                              and follow the on-screen directions\n"
 "    --vgdb-stop-at=event1,event2,... invoke gdbserver for given events [none]\n"
 "         where event is one of:\n"
-"           startup exit valgrindabexit all none\n"
-"    --track-fds=no|yes|all    track open file descriptors? [no]\n"
-"                              all includes reporting stdin, stdout and stderr\n"
+"           startup exit abexit valgrindabexit all none\n"
+"    --track-fds=no|yes|all|bad track open file descriptors? [no]\n"
+"                              all also reports on open inherited file\n"
+"                              descriptors at exit (e.g. stdin/out/err)\n"
+"                              bad only reports on file descriptor usage\n"
+"                              errors and doesn't list open file descriptors\n"
+"                              at exit\n"
+"    --modify-fds=no|yes|high  modify newly open file descriptors? [no]\n"
 "    --time-stamp=no|yes       add timestamps to log messages? [no]\n"
 "    --log-fd=<number>         log messages to file descriptor [2=stderr]\n"
 "    --log-file=<file>         log messages to <file>\n"
 "    --log-socket=ipaddr:port  log messages to socket ipaddr:port\n"
+#if defined(VGO_linux)
+"    --enable-debuginfod=no|yes query debuginfod servers for missing\n"
+"                              debuginfo [yes]\n"
+#endif
 "\n"
 "  user options for Valgrind tools that report errors:\n"
 "    --xml=yes                 emit error output in XML (some tools only)\n"
@@ -123,15 +135,17 @@ static void usage_NORETURN ( int need_help )
 "    --xml-file=<file>         XML output to <file>\n"
 "    --xml-socket=ipaddr:port  XML output to socket ipaddr:port\n"
 "    --xml-user-comment=STR    copy STR verbatim into XML output\n"
-"    --demangle=no|yes         automatically demangle C++ names? [yes]\n"
+"    --demangle=no|yes         automatically demangle decorated names? [yes]\n"
+"                              supported languages: C++, D, Rust, Java, Ada\n"
 "    --num-callers=<number>    show <number> callers in stack traces [12]\n"
 "    --error-limit=no|yes      stop showing new errors if too many? [yes]\n"
 "    --exit-on-first-error=no|yes exit code on the first error found? [no]\n"
 "    --error-exitcode=<number> exit code to return if errors found [0=disable]\n"
 "    --error-markers=<begin>,<end> add lines with begin/end markers before/after\n"
 "                              each error output in plain text mode [none]\n"
-"    --show-error-list=no|yes  show detected errors list and\n"
-"                              suppression counts at exit [no]\n"
+"    --show-error-list=no|yes|all  show detected errors list and\n"
+"                              suppression counts at exit [no].\n"
+"                              all means to also print suppressed errors.\n"
 "    -s                        same as --show-error-list=yes\n"
 "    --keep-debuginfo=no|yes   Keep symbols etc for unloaded code [no]\n"
 "                              This allows saved stack traces (e.g. memory leaks)\n"
@@ -159,6 +173,10 @@ static void usage_NORETURN ( int need_help )
 "                              size/blocks, full: profile current and cumulative\n"
 "                              allocated size/blocks and freed size/blocks.\n"
 "    --xtree-memory-file=<file>   xtree memory report file [xtmemory.kcg.%%p]\n"
+"    --realloc-zero-bytes-frees=yes|no [yes on Linux glibc, no otherwise]\n"
+"                              should calls to realloc with a size of 0\n"
+"                              free memory and return NULL or\n"
+"                              allocate/resize and return non-NULL\n"
 "\n"
 "  uncommon user options for all Valgrind tools:\n"
 "    --fullpath-after=         (with nothing after the '=')\n"
@@ -198,6 +216,8 @@ static void usage_NORETURN ( int need_help )
 "         where hint is one of:\n"
 "           lax-ioctls lax-doors fuse-compatible enable-outer\n"
 "           no-inner-prefix no-nptl-pthread-stackcache fallback-llsc none\n"
+"    --scheduling-quantum=<number>  thread-scheduling timeslice in number of\n"
+"           basic blocks [100000]\n"
 "    --fair-sched=no|yes|try   schedule threads fairly on multicore systems [no]\n"
 "    --kernel-variant=variant1,variant2,...\n"
 "         handle non-standard kernel variants [none]\n"
@@ -242,6 +262,10 @@ static void usage_NORETURN ( int need_help )
 "    -d                        show verbose debugging output\n"
 "    --stats=no|yes            show tool and core statistics [no]\n"
 "    --sanity-level=<number>   level of sanity checking to do [1]\n"
+"                              1 - does occasional stack checking\n"
+"                              2 - more stack checks and malloc checks\n"
+"                              3 - as 2 and mmap checks\n"
+"                              4 - as 3 and translation sector checks\n"
 "    --trace-flags=<XXXXXXXX>   show generated code? (X = 0|1) [00000000]\n"
 "    --profile-flags=<XXXXXXXX> ditto, but for profiling (X = 0|1) [00000000]\n"
 "    --profile-interval=<number> show profile every <number> event checks\n"
@@ -265,12 +289,12 @@ static void usage_NORETURN ( int need_help )
 "    --sym-offsets=yes|no      show syms in form 'name+offset'? [no]\n"
 "    --progress-interval=<number>  report progress every <number>\n"
 "                                  CPU seconds [0, meaning disabled]\n"
-"    --command-line-only=no|yes  only use command line options [no]\n"
-"\n"
+"    --command-line-only=no|yes  only use command line options [no]\n\n"
 "  Vex options for all Valgrind tools:\n"
 "    --vex-iropt-verbosity=<0..9>           [0]\n"
 "    --vex-iropt-level=<0..2>               [2]\n"
 "    --vex-iropt-unroll-thresh=<0..400>     [120]\n"
+"    --vex-iropt-fold-expr=no|yes           [yes]\n"
 "    --vex-guest-max-insns=<1..100>         [50]\n"
 "    --vex-guest-chase=no|yes               [yes]\n"
 "    Precise exception control.  Possible values for 'mode' are as follows\n"
@@ -313,8 +337,8 @@ static void usage_NORETURN ( int need_help )
 "  Extra options read from ~/.valgrindrc, $VALGRIND_OPTS, ./.valgrindrc\n"
 "\n"
 "  %s is %s\n"
-"  Valgrind is Copyright (C) 2000-2017, and GNU GPL'd, by Julian Seward et al.\n"
-"  LibVEX is Copyright (C) 2004-2017, and GNU GPL'd, by OpenWorks LLP et al.\n"
+"  Valgrind is Copyright (C) 2000-2024, and GNU GPL'd, by Julian Seward et al.\n"
+"  LibVEX is Copyright (C) 2004-2024, and GNU GPL'd, by OpenWorks LLP et al.\n"
 "\n"
 "  Bug reports, feedback, admiration, abuse, etc, to: %s.\n"
 "\n";
@@ -549,8 +573,12 @@ static void process_option (Clo_Mode mode,
    }
    else if VG_INT_CLOM (cloPD, arg, "--vgdb-poll",      VG_(clo_vgdb_poll)) {}
    else if VG_INT_CLOM (cloPD, arg, "--vgdb-error", VG_(clo_vgdb_error)) {}
+   /* --launched-with-multi is an internal option used by vgdb to suppress
+      some output that valgrind normally shows when using --vgdb-error.  */
+   else if VG_BOOL_CLO (arg, "--launched-with-multi",
+                        VG_(clo_launched_with_multi)) {}
    else if VG_USET_CLOM (cloPD, arg, "--vgdb-stop-at",
-                         "startup,exit,valgrindabexit",
+                         "startup,exit,abexit,valgrindabexit",
                          VG_(clo_vgdb_stop_at)) {}
    else if VG_STR_CLO (arg, "--vgdb-prefix",    VG_(clo_vgdb_prefix)) {
       VG_(arg_vgdb_prefix) = arg;
@@ -588,10 +616,19 @@ static void process_option (Clo_Mode mode,
          startpos = *nextpos ? nextpos + 1 : nextpos;
       }
    }
-   else if VG_BOOL_CLOM(cloPD, arg, "--show-error-list", VG_(clo_show_error_list)) {
+   else if VG_STR_CLOM(cloPD, arg, "--show-error-list", tmp_str) {
+      if (VG_(strcmp)(tmp_str, "yes") == 0)
+         VG_(clo_show_error_list) = 1;
+      else if (VG_(strcmp)(tmp_str, "all") == 0)
+         VG_(clo_show_error_list) = 2;
+      else if (VG_(strcmp)(tmp_str, "no") == 0)
+         VG_(clo_show_error_list) = 0;
+      else
+         VG_(fmsg_bad_option)(arg,
+            "Bad argument, should be 'yes', 'all' or 'no'\n");
       pos->show_error_list_set = True; }
    else if (VG_STREQ_CLOM(cloPD, arg, "-s")) {
-      VG_(clo_show_error_list) = True;
+      VG_(clo_show_error_list) = 1;
       pos->show_error_list_set = True;
    }
    else if VG_BOOL_CLO(arg, "--show-emwarns",   VG_(clo_show_emwarns)) {}
@@ -600,6 +637,9 @@ static void process_option (Clo_Mode mode,
    else if VG_BOOL_CLO(arg, "--run-cxx-freeres",  VG_(clo_run_cxx_freeres)) {}
    else if VG_BOOL_CLOM(cloPD, arg, "--show-below-main",  VG_(clo_show_below_main)) {}
    else if VG_BOOL_CLO(arg, "--keep-debuginfo",   VG_(clo_keep_debuginfo)) {}
+#if defined(VGO_linux)
+   else if VG_BOOL_CLO(arg, "--enable-debuginfod", VG_(clo_enable_debuginfod)) {}
+#endif
    else if VG_BOOL_CLOM(cloPD, arg, "--time-stamp",       VG_(clo_time_stamp)) {}
    else if VG_STR_CLO(arg, "--track-fds",         tmp_str) {
       if (VG_(strcmp)(tmp_str, "yes") == 0)
@@ -608,13 +648,28 @@ static void process_option (Clo_Mode mode,
          VG_(clo_track_fds) = 2;
       else if (VG_(strcmp)(tmp_str, "no") == 0)
          VG_(clo_track_fds) = 0;
+      else if (VG_(strcmp)(tmp_str, "bad") == 0)
+         VG_(clo_track_fds) = 3;
       else
          VG_(fmsg_bad_option)(arg,
             "Bad argument, should be 'yes', 'all' or 'no'\n");
    }
+   else if VG_STR_CLO(arg, "--modify-fds",         tmp_str) {
+      if (VG_(strcmp)(tmp_str, "high") == 0)
+         VG_(clo_modify_fds) = VG_MODIFY_FD_HIGH;
+      else if (VG_(strcmp)(tmp_str, "yes") == 0)
+        VG_(clo_modify_fds) = VG_MODIFY_FD_YES;
+      else if (VG_(strcmp)(tmp_str, "no") == 0)
+         VG_(clo_modify_fds) = VG_MODIFY_FD_NO;
+      else
+         VG_(fmsg_bad_option)(arg,
+            "Bad argument, should be 'high', 'yes', or 'no'\n");
+   }
    else if VG_BOOL_CLOM(cloPD, arg, "--trace-children",   VG_(clo_trace_children)) {}
    else if VG_BOOL_CLOM(cloPD, arg, "--child-silent-after-fork",
                         VG_(clo_child_silent_after_fork)) {}
+   else if VG_INT_CLOM(cloPD, arg, "--scheduling-quantum",
+                       VG_(clo_scheduling_quantum)) {}
    else if VG_STR_CLO(arg, "--fair-sched",        tmp_str) {
       if (VG_(Clo_Mode)() != cloP)
          ;
@@ -658,8 +713,8 @@ static void process_option (Clo_Mode mode,
    }
 
    else if VG_BOOL_CLOM(cloPD, arg, "--sym-offsets",      VG_(clo_sym_offsets)) {}
-   else if VG_BINT_CLOM(cloPD, arg, "--progress-interval",
-                        VG_(clo_progress_interval), 0, 3600) {}
+   else if VG_BUINT_CLOM(cloPD, arg, "--progress-interval",
+                        VG_(clo_progress_interval), 3600) {}
    else if VG_BOOL_CLO(arg, "--read-inline-info", VG_(clo_read_inline_info)) {}
    else if VG_BOOL_CLO(arg, "--read-var-info",    VG_(clo_read_var_info)) {}
 
@@ -707,6 +762,8 @@ static void process_option (Clo_Mode mode,
                        VG_(clo_vex_control).iropt_level, 0, 2) {}
    else if VG_BINT_CLO(arg, "--vex-regalloc-version",
                        VG_(clo_vex_control).regalloc_version, 2, 3) {}
+   else if VG_BOOL_CLOM(cloPD, arg, "--vex-iropt-fold-expr",
+                        VG_(clo_vex_control).iropt_fold_expr) {}
 
    else if (VG_STRINDEX_CLO(arg, "--vex-iropt-register-updates",
                            pxStrings, ix)
@@ -882,9 +939,13 @@ static void process_option (Clo_Mode mode,
 
 void VG_(process_dynamic_option) (Clo_Mode mode, HChar *value)
 {
-   process_option (mode, value, NULL);
-   // This is not supposed to change values in process_option_state,
-   // so we can give a NULL.
+   struct process_option_state dummy;
+   process_option (mode, value, &dummy);
+   // No need to handle a process_option_state once valgrind has started.
+
+   /* Update vex_control in case VALGRIND_CLO_CHANGE was used to modify a
+      VexControl member. */
+   LibVEX_set_VexControl(VG_(clo_vex_control));
 }
 
 /* Peer at previously set up VG_(args_for_valgrind) and do some
@@ -1085,6 +1146,13 @@ void main_process_cmd_line_options( void )
          here. */
    }
 
+#if defined(VGO_freebsd)
+   if (VG_(clo_sanity_level) >= 3) {
+      VG_(debugLog)(0, "main", "Warning: due to transparent memory mappings with MAP_STACK\n");
+      VG_(debugLog)(0, "main", "--sanity-level=3 and above may give spurious errors.\n");
+   }
+#endif
+
    /* All non-logging-related options have been checked.  If the logging
       option specified is ok, we can switch to it, as we know we won't
       have to generate any other command-line-related error messages.
@@ -1120,11 +1188,7 @@ void main_process_cmd_line_options( void )
 
 /* Number of file descriptors that Valgrind tries to reserve for
    its own use - just a small constant. */
-#if defined(VGO_freebsd)
-#define N_RESERVED_FDS (20)
-#else
 #define N_RESERVED_FDS (12)
-#endif
 
 static void setup_file_descriptors(void)
 {
@@ -1366,50 +1430,6 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
 
        VG_(exit)(1);
    }
-
-   //--------------------------------------------------------------
-   // FreeBSD also check for sysctl kern.elf64.allow_wx=0
-   // This is a sysctl that prevents applications from mmap'ing
-   // segments that are writeable and executable
-   //--------------------------------------------------------------
-#if defined(VGP_amd64_freebsd)
-   error = VG_(sysctlbyname)("kern.elf64.allow_wx", &val, &len, 0, 0);
-      if (error != -1 && val != 1) {
-         VG_(debugLog)(0, "main", "Valgrind: FATAL:\n");
-         VG_(debugLog)(0, "main", "sysctl kern.elf64.allow_wx sysctl is 0.\n");
-         VG_(debugLog)(0, "main", "   Set this sysctl with\n");
-         VG_(debugLog)(0, "main", "   'sysctl kern.elf64.allow_wx sysctl=1'.\n");
-         // the below code doesn't work as I expected
-         // the proccontrol command doesn't cause sysctlbyname to get a modified value
-         // which means that valgrind will still detect allow_wx == 0 and exit here
-//#if (FREEBSD_VERS >= FREEBSD_13_1)
-//          VG_(debugLog)(0, "main", "   Or, alternatively, run valgrind with\n");
-//          VG_(debugLog)(0, "main", "   'proccontrol -m wxmap -s enable valgrind [options] prog-and-args'\n");
-//#endif
-          VG_(debugLog)(0, "main", "   Cannot continue.\n");
-
-          VG_(exit)(1);
-      }
-
-#endif
-
-      /* also 323bit version */
-#if defined(VGP_x86_freebsd)
-   error = VG_(sysctlbyname)("kern.elf32.allow_wx", &val, &len, 0, 0);
-      if (error != -1 && val != 1) {
-          VG_(debugLog)(0, "main", "Valgrind: FATAL:\n");
-          VG_(debugLog)(0, "main", "sysctl kern.elf32.allow_wx sysctl is 0.\n");
-          VG_(debugLog)(0, "main", "   Set this sysctl with\n");
-          VG_(debugLog)(0, "main", "   'sysctl kern.elf32.allow_wx sysctl=1'.\n");
-//#if (FREEBSD_VERS >= FREEBSD_13_1)
-//          VG_(debugLog)(0, "main", "   Or, alternatively, run valgrind with\n");
-//          VG_(debugLog)(0, "main", "   'proccontrol -m wxmap -s enable valgrind [options] prog-and-args'\n");
-//#endif
-          VG_(debugLog)(0, "main", "   Cannot continue.\n");
-
-          VG_(exit)(1);
-      }
-#endif
 #endif
 
 
@@ -1510,7 +1530,7 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
         VG_(printf)("   * ARM (armv7)\n");
         VG_(printf)("   * MIPS (mips32 and above; mips64 and above)\n");
         VG_(printf)("   * PowerPC (most; ppc405 and above)\n");
-        VG_(printf)("   * System z (64bit only - s390x; z990 and above)\n");
+        VG_(printf)("   * System z (64bit only - s390x; z196 and above)\n");
         VG_(printf)("\n");
         VG_(exit)(1);
      }
@@ -1619,7 +1639,7 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    if (!need_help) {
       VG_(debugLog)(1, "main", "Create initial image\n");
 
-#     if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#     if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd)
       the_iicii.argv              = argv;
       the_iicii.envp              = envp;
       the_iicii.toolname          = VG_(clo_toolname);
@@ -1658,14 +1678,13 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    VG_(cl_psinfo_fd) = -1;
 #endif
 
-#if defined(HAVE_PROC_SELF_CMDLINE) || defined(HAVE_PROC_SELF_AUXV) \
-    || defined(VGO_solaris)
+#if defined(VGO_linux) || defined(VGO_solaris)
    if (!need_help) {
       HChar  buf[50];   // large enough
       HChar  buf2[VG_(mkstemp_fullname_bufsz)(sizeof buf - 1)];
       Int    fd, r;
 
-#  if defined(HAVE_PROC_SELF_CMDLINE)
+#if defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE)
       /* Fake /proc/<pid>/cmdline only on Linux and Solaris if supported. */
       HChar  nul[1];
       const HChar* exename;
@@ -1698,9 +1717,8 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
          VG_(err_config_error)("Can't delete client cmdline file in %s\n", buf2);
 
       VG_(cl_cmdline_fd) = fd;
-#  endif // defined(HAVE_PROC_SELF_CMDLINE)
+#endif // defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE)
 
-#  if defined(HAVE_PROC_SELF_AUXV)
       /* Fake /proc/<pid>/auxv on both Linux and Solaris. */
       VG_(debugLog)(1, "main", "Create fake /proc/<pid>/auxv\n");
 
@@ -1730,9 +1748,8 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
          VG_(err_config_error)("Can't delete client auxv file in %s\n", buf2);
 
       VG_(cl_auxv_fd) = fd;
-#  endif // defined(HAVE_PROC_SELF_AUXV)
 
-#  if defined(VGO_solaris)
+#if defined(VGO_solaris)
       /* Fake /proc/<pid>/psinfo on Solaris.
        * Contents will be fetched and partially faked later on the fly. */
       VG_(debugLog)(1, "main", "Create fake /proc/<pid>/psinfo\n");
@@ -1748,10 +1765,28 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
          VG_(err_config_error)("Can't delete client psinfo file in %s\n", buf2);
 
       VG_(cl_psinfo_fd) = fd;
-#  endif /* VGO_solaris */
+#endif /* VGO_solaris */
    }
-#endif /* defined(HAVE_PROC_SELF_CMDLINE) || defined(HAVE_PROC_SELF_AUXV) \
-          || defined(VGO_solaris) */
+#endif
+
+#if defined(VGO_freebsd)
+   /* On FreeBSD /proc is optional
+    * Most functionality is accessed through sysctl instead */
+   if (!need_help) {
+      struct vg_stat statbuf;
+      SysRes statres = VG_(stat)("/proc", &statbuf);
+      if (!sr_isError(statres) || VKI_S_ISLNK(statbuf.mode)) {
+         VG_(have_slash_proc) = True;
+      }
+      // each directory contains the following that might get read
+      // file - a symlink to the exe
+      // cmdline - null separate command line
+      // etype - the executable type e.g., FreeBSD ELF64 (same for guest and host)
+      // map - a memory map, tricky to synthesize
+      // rlimit - list of process limits
+      // status - process, pid, ppid pts cty uid gid and some other stuff
+   }
+#endif
 
    //--------------------------------------------------------------
    // Init tool part 1: pre_clo_init
@@ -1875,7 +1910,7 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    addr2dihandle = VG_(newXA)( VG_(malloc), "main.vm.2",
                                VG_(free), sizeof(Addr_n_ULong) );
 
-#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
+#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
    { Addr* seg_starts;
      Int   n_seg_starts;
      Addr_n_ULong anu;
@@ -1895,22 +1930,6 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
            anu.a = seg_starts[i];
            VG_(addToXA)( addr2dihandle, &anu );
         }
-     }
-
-     VG_(free)( seg_starts );
-   }
-#  elif defined(VGO_darwin)
-   { Addr* seg_starts;
-     Int   n_seg_starts;
-     seg_starts = VG_(get_segment_starts)( SkFileC, &n_seg_starts );
-     vg_assert(seg_starts && n_seg_starts >= 0);
-
-     /* show them all to the debug info reader.
-        Don't read from V segments (unlike Linux) */
-     // GrP fixme really?
-     for (i = 0; i < n_seg_starts; i++) {
-        VG_(di_notify_mmap)( seg_starts[i], False/*don't allow_SkFileV*/,
-                             -1/*don't use_fd*/);
      }
 
      VG_(free)( seg_starts );
@@ -1952,12 +1971,24 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    VG_(init_Threads)();
 
    //--------------------------------------------------------------
+   // Initialize the dyld cache, which is required with macOS 11 (Big Sur) and onwards
+   // as some system libraries aren't provided on the disk anymore
+   //   p: none
+   // Note: some tools don't like to start mapping memory right way, so we do it lazily in those cases.
+   //--------------------------------------------------------------
+#  if defined(VGO_darwin) && DARWIN_VERS >= DARWIN_11_00
+   if (the_iifii.dynamic) {
+     VG_(dyld_cache_init)(VG_(clo_toolname));
+   }
+#  endif
+
+   //--------------------------------------------------------------
    // Initialise the scheduler (phase 1) [generates tid_main]
    //   p: none, afaics
    //--------------------------------------------------------------
    VG_(debugLog)(1, "main", "Initialise scheduler (phase 1)\n");
    tid_main = VG_(scheduler_init_phase1)();
-   vg_assert(tid_main >= 0 && tid_main < VG_N_THREADS
+   vg_assert(tid_main < VG_N_THREADS
              && tid_main != VG_INVALID_THREADID);
    /* Tell the tool about tid_main */
    VG_TRACK( pre_thread_ll_create, VG_INVALID_THREADID, tid_main );
@@ -2066,27 +2097,13 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
                True   /* executable? */,
                0 /* di_handle: no associated debug info */ );
 
+#if defined(VGO_darwin)
+     VG_(mach_record_system_memory)();
+#    endif
+
      /* Clear the running thread indicator */
      VG_(running_tid) = VG_INVALID_THREADID;
      vg_assert(VG_(running_tid) == VG_INVALID_THREADID);
-
-     /* Darwin only: tell the tools where the client's kernel commpage
-        is.  It would be better to do this by telling aspacemgr about
-        it -- see the now disused record_system_memory() in
-        initimg-darwin.c -- but that causes the sync checker to fail,
-        since the mapping doesn't appear in the kernel-supplied
-        process map.  So do it here instead. */
-#    if defined(VGP_amd64_darwin)
-     VG_TRACK( new_mem_startup,
-               0x7fffffe00000, 0x7ffffffff000-0x7fffffe00000,
-               True, False, True, /* r-x */
-               0 /* di_handle: no associated debug info */ );
-#    elif defined(VGP_x86_darwin)
-     VG_TRACK( new_mem_startup,
-               0xfffec000, 0xfffff000-0xfffec000,
-               True, False, True, /* r-x */
-               0 /* di_handle: no associated debug info */ );
-#    endif
    }
 
    //--------------------------------------------------------------
@@ -2187,6 +2204,21 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    vg_assert(0);
 }
 
+/* Return the exit code to use when tid exits, depending on the tid os_state
+   exit code and the clo options controlling valgrind exit code. */
+static
+Int tid_exit_code (ThreadId tid)
+{
+   if (VG_(clo_error_exitcode) > 0 && VG_(get_n_errs_found)() > 0)
+      /* Change the application return code to user's return code,
+         if an error was found */
+      return VG_(clo_error_exitcode);
+   else
+      /* otherwise, return the client's exit code, in the normal
+         way. */
+      return VG_(threads)[tid].os_state.exitcode;
+}
+
 /* Do everything which needs doing when the last thread exits or when
    a thread exits requesting a complete process exit.
 
@@ -2253,8 +2285,16 @@ void shutdown_actions_NORETURN( ThreadId tid,
    }
 
    /* Final call to gdbserver, if requested. */
-   if (VG_(gdbserver_stop_at) (VgdbStopAt_Exit)) {
-      VG_(umsg)("(action at exit) vgdb me ... \n");
+   if (VG_(gdbserver_stop_at) (VgdbStopAt_Abexit)
+              && tid_exit_code (tid) != 0) {
+      if (!(VG_(clo_launched_with_multi)))
+         VG_(umsg)("(action at abexit, exit code %d) vgdb me ... \n",
+                   tid_exit_code (tid));
+      VG_(gdbserver) (tid);
+   } else if (VG_(gdbserver_stop_at) (VgdbStopAt_Exit)) {
+      if (!(VG_(clo_launched_with_multi)))
+          VG_(umsg)("(action at exit, exit code %d) vgdb me ... \n",
+                    tid_exit_code (tid));
       VG_(gdbserver) (tid);
    }
    VG_(threads)[tid].status = VgTs_Empty;
@@ -2264,9 +2304,7 @@ void shutdown_actions_NORETURN( ThreadId tid,
    // affects what order the messages come.
    //--------------------------------------------------------------
    // First thing in the post-amble is a blank line.
-   if (VG_(clo_xml))
-      VG_(printf_xml)("\n");
-   else if (VG_(clo_verbosity) > 0)
+   if (VG_(clo_verbosity) > 0 && !VG_(clo_xml))
       VG_(message)(Vg_UserMsg, "\n");
 
    if (VG_(clo_xml)) {
@@ -2281,7 +2319,7 @@ void shutdown_actions_NORETURN( ThreadId tid,
    }
 
    /* Print out file descriptor summary and stats. */
-   if (VG_(clo_track_fds))
+   if (VG_(clo_track_fds) && VG_(clo_track_fds) < 3)
       VG_(show_open_fds)("at exit");
 
    /* Call the tool's finalisation function.  This makes Memcheck's
@@ -2289,7 +2327,8 @@ void shutdown_actions_NORETURN( ThreadId tid,
       the error management machinery. */
    VG_TDICT_CALL(tool_fini, 0/*exitcode*/);
 
-   if (VG_(needs).core_errors || VG_(needs).tool_errors) {
+   if ((VG_(needs).core_errors && VG_(found_or_suppressed_errs)())
+       || VG_(needs).tool_errors) {
       if (VG_(clo_verbosity) == 1
           && !VG_(clo_xml)
           && !VG_(clo_show_error_list))
@@ -2303,13 +2342,11 @@ void shutdown_actions_NORETURN( ThreadId tid,
       }
 
       /* In XML mode, this merely prints the used suppressions. */
-      VG_(show_all_errors)(VG_(clo_verbosity), VG_(clo_xml));
+      VG_(show_all_errors)(VG_(clo_verbosity), VG_(clo_xml), VG_(clo_show_error_list));
    }
 
    if (VG_(clo_xml)) {
-      VG_(printf_xml)("\n");
       VG_(printf_xml)("</valgrindoutput>\n");
-      VG_(printf_xml)("\n");
    }
 
    VG_(sanity_check_general)( True /*include expensive checks*/ );
@@ -2359,16 +2396,7 @@ void shutdown_actions_NORETURN( ThreadId tid,
    switch (tids_schedretcode) {
    case VgSrc_ExitThread:  /* the normal way out (Linux, Solaris) */
    case VgSrc_ExitProcess: /* the normal way out (Darwin) */
-      /* Change the application return code to user's return code,
-         if an error was found */
-      if (VG_(clo_error_exitcode) > 0
-          && VG_(get_n_errs_found)() > 0) {
-         VG_(client_exit)( VG_(clo_error_exitcode) );
-      } else {
-         /* otherwise, return the client's exit code, in the normal
-            way. */
-         VG_(client_exit)( VG_(threads)[tid].os_state.exitcode );
-      }
+      VG_(client_exit)(tid_exit_code (tid));
       /* NOT ALIVE HERE! */
       VG_(core_panic)("entered the afterlife in main() -- ExitT/P");
       break; /* what the hell :) */
@@ -2529,6 +2557,11 @@ static void final_tidyup(ThreadId tid)
    VG_TRACK(post_reg_write, Vg_CoreClientReq, tid,
             offsetof(VexGuestPPC64State, guest_GPR3),
             sizeof(VG_(threads)[tid].arch.vex.guest_GPR3));
+#  elif defined(VGA_riscv64)
+   VG_(threads)[tid].arch.vex.guest_x10 = to_run;
+   VG_TRACK(post_reg_write, Vg_CoreClientReq, tid,
+            offsetof(VexGuestRISCV64State, guest_x10),
+            sizeof(VG_(threads)[tid].arch.vex.guest_x10));
 #  elif defined(VGA_s390x)
    VG_(threads)[tid].arch.vex.guest_r2 = to_run;
    VG_TRACK(post_reg_write, Vg_CoreClientReq, tid,
@@ -3062,6 +3095,33 @@ asm(
     ".set pop                                           \n\t"
 ".previous                                              \n\t"
 );
+#elif defined(VGP_riscv64_linux)
+asm("\n"
+    "\t.text\n"
+    "\t.type _start,@function\n"
+    "\t.global _start\n"
+    "_start:\n"
+    /* establish the global pointer in gp */
+    ".option push\n"
+    ".option norelax\n"
+    "\tla gp, __global_pointer$\n"
+    ".option pop\n"
+    /* set up the new stack in t0 */
+    "\tla t0, vgPlain_interim_stack\n"
+    "\tli t1, "VG_STRINGIFY(VG_STACK_GUARD_SZB)"\n"
+    "\tadd t0, t0, t1\n"
+    "\tli t1, "VG_STRINGIFY(VG_DEFAULT_STACK_ACTIVE_SZB)"\n"
+    "\tadd t0, t0, t1\n"
+    "\tli t1, 0xFFFFFF00\n"
+    "\tand t0, t0, t1\n"
+    /* install it, and collect the original one */
+    "\tmv a0, sp\n"
+    "\tmv sp, t0\n"
+    /* call _start_in_C_linux, passing it the startup sp */
+    "\tj _start_in_C_linux\n"
+    "\tunimp\n"
+    ".previous\n"
+);
 #else
 #  error "Unknown platform"
 #endif
@@ -3336,6 +3396,47 @@ void _start_in_C_solaris ( UWord* pArgc )
 /*====================================================================*/
 #elif defined(VGO_freebsd)
 
+/*
+ * Could probably extract __FreeBSD_version at configure time
+ */
+/* --- !!! --- EXTERNAL HEADERS start --- !!! --- */
+#include <sys/param.h>       /* __FreeBSD_version */
+/* --- !!! --- EXTERNAL HEADERS end --- !!! --- */
+
+/*
+ * We need to add two elf notes in order for image activator to parse
+ * additional binary properites.
+ * First note declares the ABI, second is the feature note.
+ * This is primarly used to turn off W^X policy for all valgrind tools,
+ * as they don't work with it enabled.
+ */
+
+/* Based on FreeBSD sources: lib/csu/common/crtbrand.S */
+asm("\n"
+    ".section .note.tag,\"aG\",%note,.freebsd.noteG,comdat\n"
+    ".p2align        2\n"
+    ".4byte          2f-1f\n"
+    ".4byte          4f-3f\n"
+    ".4byte          "VG_STRINGIFY(VKI_NT_FREEBSD_ABI_TAG)"\n"
+"1:  .asciz          \"FreeBSD\"\n"
+"2:  .p2align        2\n"
+"3:  .4byte          "VG_STRINGIFY(__FreeBSD_version)"\n"
+"4:  .previous\n"
+);
+
+/* Based on FreeBSD sources: lib/csu/common/feature_note.S */
+asm("\n"
+    ".section .note.tag,\"a\",%note\n"
+    ".p2align        2\n"
+    ".4byte          2f-1f\n"
+    ".4byte          4f-3f\n"
+    ".4byte          "VG_STRINGIFY(VKI_NT_FREEBSD_FEATURE_CTL)"\n"
+"1:  .asciz          \"FreeBSD\"\n"
+"2:  .p2align        2\n"
+"3:  .4byte          "VG_STRINGIFY(VKI_NT_FREEBSD_FCTL_WXNEEDED)"\n"
+"4:  .previous\n"
+);
+
 #if defined(VGP_x86_freebsd)
 asm("\n"
     ".text\n"
@@ -3376,6 +3477,11 @@ asm("\n"
 //
 // Maybe on FreeBSD the pointer to argc is 16byte aligned and can be 8 bytes above the
 // start of the stack?
+//
+// Some answers to this mystery here
+// https://forums.freebsd.org/threads/stack-alignment-argc-location-in-assembled-binaries.89302/#post-613119
+// and here
+// https://github.com/freebsd/freebsd-src/blob/releng/5.1/sys/amd64/amd64/machdep.c#LL487C1-L488C42
 
 asm("\n"
     ".text\n"
@@ -3394,18 +3500,49 @@ asm("\n"
     "\thlt\n"
     ".previous\n"
 );
+
+#elif defined(VGP_arm64_freebsd)
+
+
+// on entry
+// x0 contains a pointer to argc
+// sp contains a pointer either to the same address
+//    or 8 below it depending on whether the stack pointer
+//    was 16byte aligned
+//
+// before calling we want
+// x0 to contain a pointer to argc - just leave it alone
+// x1 to contain a pointer to the original stack in case we need it like amd64
+// sp to contain a pointer to the end of VG_(interim_stack)
+asm("\n"
+    ".text\n"
+    "\t.align 2\n"
+    "\t.type _start,#function\n"
+    "\t.global _start\n"
+    "_start:\n"
+    "\tadrp x2, vgPlain_interim_stack\n"
+    "\tadd  x2, x2, :lo12:vgPlain_interim_stack\n"
+    "\tldr  x3, ="VG_STRINGIFY(VG_STACK_GUARD_SZB)"\n"
+    "\tadd  x2, x2, x3\n"
+    "\tldr  x3, ="VG_STRINGIFY(VG_DEFAULT_STACK_ACTIVE_SZB)"\n"
+    "\tadd  x2, x2, x3\n"
+    "\tand  x2, x2, -16\n"
+    "\tmov  x1, sp\n"
+    "\tmov  sp, x2\n"
+    "\tb _start_in_C_freebsd\n"
+);
 #endif
 
 void *memcpy(void *dest, const void *src, size_t n);
 void *memcpy(void *dest, const void *src, size_t n) {
    return VG_(memcpy)(dest, src, n);
 }
-void* memmove(void *dest, const void *src, SizeT n);
-void* memmove(void *dest, const void *src, SizeT n) {
+void* memmove(void *dest, const void *src, size_t n);
+void* memmove(void *dest, const void *src, size_t n) {
    return VG_(memmove)(dest,src,n);
 }
-void* memset(void *s, int c, SizeT n);
-void* memset(void *s, int c, SizeT n) {
+void* memset(void *s, int c, size_t n);
+void* memset(void *s, int c, size_t n) {
   return VG_(memset)(s,c,n);
 }
 
@@ -3427,7 +3564,7 @@ void _start_in_C_freebsd ( UWord* pArgc, UWord *initial_sp )
    VG_(memset)( &the_iicii, 0, sizeof(the_iicii) );
    VG_(memset)( &the_iifii, 0, sizeof(the_iifii) );
 
-#if defined(VGP_amd64_freebsd)
+#if defined(VGP_amd64_freebsd) || defined(VGP_arm64_freebsd)
    the_iicii.sp_at_startup = (Addr)initial_sp;
 #else
    the_iicii.sp_at_startup = (Addr)pArgc;
@@ -3502,12 +3639,12 @@ __asm__ (
     );
 
 #  else
-#    error "Unknown architecture"
+#  error "Unknown OS"
 #  endif
 
-void* memcpy(void *dest, const void *src, SizeT n);
-void* memcpy(void *dest, const void *src, SizeT n) {
-   return VG_(memcpy)(dest,src,n);
+SizeT VG_(get_client_stack_max_size)(void)
+{
+   return the_iifii.clstack_max_size;
 }
 void* memmove(void *dest, const void *src, SizeT n);
 void* memmove(void *dest, const void *src, SizeT n) {
@@ -3998,11 +4135,12 @@ UWord voucher_mach_msg_set ( UWord arg1 )
 
 #endif
 
-
+#if defined(VGO_freebsd)
 Word VG_(get_usrstack)(void)
 {
-   return VG_PGROUNDDN(the_iicii.clstack_end - the_iifii.clstack_max_size);
+   return VG_PGROUNDDN(the_iicii.clstack_end) + VKI_PAGE_SIZE;
 }
+#endif
 
 
 
