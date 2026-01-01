@@ -343,6 +343,7 @@ PRELOAD_LDFLAGS_COMMON_SOLARIS = -nodefaultlibs -shared -Wl,-z,interpose,-z,init
 if SOLARIS_XPG_SYMBOLS_PRESENT
 PRELOAD_LDFLAGS_COMMON_SOLARIS += -Wl,-M,$(top_srcdir)/solaris/vgpreload-solaris.mapfile
 endif
+PRELOAD_LDFLAGS_COMMON_NETBSD = -nodefaultlibs -shared -Wl,-z,interpose,-z,initfirst
 
 if VGCONF_PLATVARIANT_IS_ANDROID
 # The Android toolchain includes all kinds of stdlib helpers present in
