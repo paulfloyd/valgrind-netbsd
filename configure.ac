@@ -677,6 +677,12 @@ case "${host_os}" in
         DEFAULT_SUPP="$srcdir/solaris12.supp ${DEFAULT_SUPP}"
         ;;
 
+     netbsd*)
+        AC_MSG_RESULT([ok (${host_os})])
+        VGCONF_OS="netbsd"
+        DEFAULT_SUPP="netbsd.supp ${DEFAULT_SUPP}"
+        ;;
+
      *) 
 	AC_MSG_RESULT([no (${host_os})])
 	AC_MSG_ERROR([Valgrind is operating system specific. Sorry.])
@@ -1107,6 +1113,17 @@ case "$ARCH_MAX-$VGCONF_OS" in
         fi
         AC_MSG_RESULT([ok (${ARCH_MAX}-${VGCONF_OS})])
         ;;
+    amd64-netbsd)
+        VGCONF_ARCH_PRI="amd64"
+        VGCONF_ARCH_SEC=""
+        VGCONF_PLATFORM_PRI_CAPS="AMD64_NETBSD"
+        VGCONF_PLATFORM_SEC_CAPS=""
+        valt_load_address_pri_norml="0x38000000"
+        valt_load_address_pri_inner="0x28000000"
+        valt_load_address_sec_norml="0xUNSET"
+        valt_load_address_sec_inner="0xUNSET"
+        AC_MSG_RESULT([ok (${ARCH_MAX}-${VGCONF_OS})])
+        ;;
     *)
         VGCONF_ARCH_PRI="unknown"
         VGCONF_ARCH_SEC="unknown"
@@ -1138,7 +1155,8 @@ AM_CONDITIONAL(VGCONF_ARCHS_INCLUDE_AMD64,
                test x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_LINUX \
                  -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_FREEBSD \
                  -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_DARWIN \
-                 -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_SOLARIS )
+                 -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_SOLARIS \
+                 -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_NETBSD )
 AM_CONDITIONAL(VGCONF_ARCHS_INCLUDE_PPC32, 
                test x$VGCONF_PLATFORM_PRI_CAPS = xPPC32_LINUX \ 
                  -o x$VGCONF_PLATFORM_SEC_CAPS = xPPC32_LINUX )
@@ -1235,6 +1253,8 @@ AM_CONDITIONAL(VGCONF_OS_IS_FREEBSD,
                test x$VGCONF_PLATFORM_PRI_CAPS = xX86_FREEBSD \
                  -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_FREEBSD \
                  -o x$VGCONF_PLATFORM_PRI_CAPS = xARM64_FREEBSD)
+AM_CONDITIONAL(VGCONF_OS_IS_NETBSD,
+               test x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_NETBSD)
 AM_CONDITIONAL(VGCONF_OS_IS_DARWIN,
                test x$VGCONF_PLATFORM_PRI_CAPS = xX86_DARWIN \
                  -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_DARWIN)
@@ -1366,6 +1386,11 @@ if test x$VGCONF_PLATFORM_PRI_CAPS = xX86_SOLARIS \
     GLIBC_VERSION="solaris"
 fi
 
+# ditto for NetBSD
+if test x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_NETBSD; then
+    GLIBC_VERSION="netbsd"
+fi
+
 # GLIBC_VERSION is empty if a musl libc is used, so use the toolchain tuple
 # in this case.
 if test x$GLIBC_VERSION = x; then
@@ -1462,6 +1487,12 @@ case "${GLIBC_VERSION}" in
 	AC_MSG_RESULT(Musl)
 	AC_DEFINE([MUSL_LIBC], 1, [Define to 1 if you're using Musl libc])
 	DEFAULT_SUPP="$srcdir/musl.supp ${DEFAULT_SUPP}"
+	;;
+     netbsd)
+	AC_MSG_RESULT([NetBSD])
+	AC_DEFINE([NETBSD_LIBC], 1, [Define to 1 if you're using NetBSD])
+	# DEFAULT_SUPP set in host_os switch-case above.
+	# No other suppression file is used.
 	;;
      2.0|2.1|*)
 	AC_MSG_RESULT([unsupported version ${GLIBC_VERSION}])
@@ -5078,7 +5109,27 @@ AM_CONDITIONAL(FREEBSD_TIMERFD_SYSCALL, false)
 
 fi # test "$VGCONF_OS" = "freebsd"
 
+if test "$VGCONF_OS" = "netbsd"; then
 
+# Integer constants used by m_sysident.S
+m4_foreach(
+    [name],
+    [[ELF_NOTE_NETBSD_NAMESZ],
+     [ELF_NOTE_NETBSD_DESCSZ],
+     [ELF_NOTE_TYPE_NETBSD_TAG],
+     [__NetBSD_Version__],
+     [ELF_NOTE_PAX_NAMESZ],
+     [ELF_NOTE_PAX_DESCSZ],
+     [ELF_NOTE_TYPE_PAX_TAG]],
+    [AC_MSG_CHECKING([for ]name)
+     AC_COMPUTE_INT(name, name,
+         [#include <sys/param.h>
+          #include <sys/exec_elf.h>],
+         [AC_MSG_ERROR([Cannot determine the value of ]name)])
+     AC_MSG_RESULT([$]name)
+     AC_DEFINE_UNQUOTED(name, [$]name, [Define to the value of ]name)])
+
+fi # test "$VGCONF_OS" = "netbsd"; then
 #----------------------------------------------------------------------------
 # Checks for C header files.
 #----------------------------------------------------------------------------
@@ -5325,7 +5376,8 @@ elif test x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_LINUX \
        -o x$VGCONF_PLATFORM_PRI_CAPS = xARM64_FREEBSD \
        -o x$VGCONF_PLATFORM_PRI_CAPS = xMIPS64_LINUX \
        -o x$VGCONF_PLATFORM_PRI_CAPS = xS390X_LINUX \
-       -o x$VGCONF_PLATFORM_PRI_CAPS = xRISCV64_LINUX ; then
+       -o x$VGCONF_PLATFORM_PRI_CAPS = xRISCV64_LINUX \
+       -o x$VGCONF_PLATFORM_PRI_CAPS = xAMD64_NETBSD ; then
   mflag_primary=$FLAG_M64
 elif test x$VGCONF_PLATFORM_PRI_CAPS = xX86_DARWIN ; then
   mflag_primary="$FLAG_M32 -arch i386"
@@ -5366,6 +5418,9 @@ AM_COND_IF([VGCONF_OS_IS_DARWIN],
            [CFLAGS_MPI="-g -O -fno-omit-frame-pointer -Wall -dynamic"
             LDFLAGS_MPI="-dynamic -dynamiclib -all_load"])
 AM_COND_IF([VGCONF_OS_IS_SOLARIS],
+           [CFLAGS_MPI="-g -O -fno-omit-frame-pointer -Wall -fpic"
+            LDFLAGS_MPI="-fpic -shared"])
+AM_COND_IF([VGCONF_OS_IS_NETBSD],
            [CFLAGS_MPI="-g -O -fno-omit-frame-pointer -Wall -fpic"
             LDFLAGS_MPI="-fpic -shared"])
 
@@ -6031,6 +6086,8 @@ AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
                 [chmod +x coregrind/link_tool_exe_linux])
 AC_CONFIG_FILES([coregrind/link_tool_exe_freebsd],
                 [chmod +x coregrind/link_tool_exe_freebsd])
+AC_CONFIG_FILES([coregrind/link_tool_exe_netbsd],
+                [chmod +x coregrind/link_tool_exe_netbsd])
 AC_CONFIG_FILES([coregrind/link_tool_exe_darwin],
                 [chmod +x coregrind/link_tool_exe_darwin])
 AC_CONFIG_FILES([coregrind/link_tool_exe_solaris],
