@@ -107,7 +107,12 @@ endif
 if VGCONF_OS_IS_FREEBSD
 vgdb_SOURCES += vgdb-invoker-freebsd.c
 endif
-
+if VGCONF_OS_IS_NETBSD
+# Some NetBSD specific stuff is needed as the ptrace(2) interface is
+# not the same. Till we find someone courageous having access to
+# NetBSD, 'none' implementation is used.
+vgdb_SOURCES += vgdb-invoker-none.c
+endif
 vgdb_CPPFLAGS  = $(AM_CPPFLAGS_PRI) $(GDB_SCRIPTS_DIR)
 vgdb_CFLAGS    = $(AM_CFLAGS_PRI) $(LTO_CFLAGS) -fhosted
 vgdb_CCASFLAGS = $(AM_CCASFLAGS_PRI)
