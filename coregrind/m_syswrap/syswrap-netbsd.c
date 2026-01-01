@@ -712,7 +712,7 @@ PRE(sys_break)
          Bool ok = VG_(am_create_reservation)(resvn_start, resvn_size, SmLower,
                                               anon_size);
          if (!ok) {
-            VG_(umsg)("brk segment overflow in thread #%d: can't grow "
+            VG_(umsg)("brk segment overflow in thread #%u: can't grow "
                       "to %#lx\n", tid, new_brk);
             SET_STATUS_Failure(VKI_ENOMEM);
             return;
@@ -726,7 +726,7 @@ PRE(sys_break)
          /* Address space manager will merge old and new data segments. */
          sres = VG_(am_mmap_anon_fixed_client)(anon_start, anon_size, prot);
          if (sr_isError(sres)) {
-            VG_(umsg)("Cannot map memory to grow brk segment in thread #%d "
+            VG_(umsg)("Cannot map memory to grow brk segment in thread #%u "
                       "to %#lx\n", tid, new_brk);
             SET_STATUS_Failure(VKI_ENOMEM);
             return;
@@ -1134,7 +1134,7 @@ PRE(sys_lwp_create)
 {
    /* int
     * _lwp_create(ucontext_t *context, unsigned long flags, lwpid_t *new_lwp); */
-   PRINT("sys_lwp_create ( %#lx, %ld, %#lx )", ARG1, ARG2, ARG3);
+   PRINT("sys_lwp_create ( %#lx, %lu, %#lx )", ARG1, ARG2, ARG3);
    PRE_REG_READ3(int, "_lwp_create",
                  vki_ucontext_t *, context, unsigned long, flags, vki_lwpid_t *, new_lwp);
    PRE_MEM_WRITE("_lwp_create(new_lwp)", ARG3, sizeof(vki_lwpid_t));
@@ -1263,7 +1263,7 @@ PRE(sys_lwp_self)
 PRE(sys_lwp_wakeup)
 {
    /* int _lwp_wakeup(lwpid_t lwp); */
-   PRINT("sys_lwp_wakeup ( %ld )", ARG1);
+   PRINT("sys_lwp_wakeup ( %lu )", ARG1);
    PRE_REG_READ1(int, "_lwp_wakeup", vki_lwpid_t, lwp);
 }
 
@@ -1323,7 +1323,7 @@ PRE(sys_lwp_kill)
       SET_STATUS_from_SysRes( VG_(do_syscall2)(SYSNO, ARG1, ARG2) );
 
    if (VG_(clo_trace_signals))
-      VG_(message)(Vg_DebugMsg, "_lwp_kill: sent signal %lu to thread %lu\n",
+      VG_(message)(Vg_DebugMsg, "_lwp_kill: sent signal %ld to thread %ld\n",
                    SARG2, SARG1);
 
    /* This kill might have given us a pending signal.  Ask for a check once

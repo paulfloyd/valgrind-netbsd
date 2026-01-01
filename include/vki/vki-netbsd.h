@@ -46,6 +46,7 @@
 #include <limits.h>
 #define VKI_NGROUPS_MAX     NGROUPS_MAX
 #define VKI_PATH_MAX        PATH_MAX
+#define VKI_MAXPATHLEN      PATH_MAX
 /* Used in launcher-linux.c which we share with Linux port. */
 #define VKI_BINPRM_BUF_SIZE VKI_PATH_MAX
 
@@ -302,6 +303,7 @@ typedef ucontext_t     vki_ucontext_t;
 #define VKI_F_SETLK         F_SETLK
 #define VKI_F_SETLKW        F_SETLKW
 #define VKI_F_SETNOSIGPIPE  F_SETNOSIGPIPE
+#define VKI_F_GETPATH       F_GETPATH
 #define VKI_F_SETOWN        F_SETOWN
 #define VKI_FD_CLOEXEC      FD_CLOEXEC
 #define VKI_O_APPEND        O_APPEND

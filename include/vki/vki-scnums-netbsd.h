@@ -55,7 +55,13 @@
 #define __NR_fcntl              SYS_fcntl
 #define __NR_fork               SYS_fork
 #define __NR_fstat              SYS___fstat50
+#if defined(SYS_fstatvfs1)
 #define __NR_fstatvfs1          SYS_fstatvfs1
+#elif defined(SYS___fstatvfs190)
+#define __NR_fstatvfs1          SYS___fstatvfs190
+#else
+#error No SYS_fstatvfs1XX defined
+#endif
 #define __NR_ftruncate          SYS_ftruncate
 #define __NR_getcontext         SYS_getcontext
 #define __NR_getcwd             SYS___getcwd
