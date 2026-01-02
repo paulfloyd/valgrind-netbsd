@@ -1553,7 +1553,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_read,                 sys_read),                  /*   3 */
    GENX_(__NR_write,                sys_write),                 /*   4 */
    GENXY(__NR_open,                 sys_open),                  /*   5 */
-   GENXY(__NR_close,                sys_close),                 /*   6 */
+   GENX_(__NR_close,                sys_close),                 /*   6 */
    GENX_(__NR_unlink,               sys_unlink),                /*  10 */
    GENX_(__NR_chdir,                sys_chdir),                 /*  12 */
    GENX_(__NR_chmod,                sys_chmod),                 /*  15 */
@@ -1613,7 +1613,9 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_mq_receive,           sys_mq_receive),            /* 264 */
    NBDX_(__NR_minherit,             sys_minherit),              /* 273 */
    GENXY(__NR_sigaltstack,          sys_sigaltstack),           /* 281 */
+#if 0
    GENX_(__NR_vfork,                sys_vfork),                 /* 282 */
+#endif
    GENXY(__NR_sigprocmask,          sys_sigprocmask),           /* 293 */
    GENX_(__NR_sigsuspend,           sys_sigsuspend),            /* 294 */
    GENXY(__NR_getcwd,               sys_getcwd),                /* 296 */

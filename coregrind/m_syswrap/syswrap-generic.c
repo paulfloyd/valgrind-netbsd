@@ -6003,7 +6003,7 @@ POST(sys_socketpair)
                                     ARG1, ARG2, ARG3, ARG4);
 }
 
-#if defined(HAVE_SYS_SEM_H)
+#if defined(HAVE_SYS_SEM_H) || defined(VGO_netbsd)
 
 PRE(sys_semget)
 {
@@ -6068,7 +6068,7 @@ PRE(sys_mq_open)
        * mq_open(const char *name, int oflag, mode_t mode, struct mq_attr *attr);
        */
       PRINT("sys_mq_open ( %#" FMT_REGWORD "x(%s), %ld, %ld, %#" FMT_REGWORD "x )",
-            ARG1, (HChar*)ARG1, SARG2, ARG3, ARG4);
+            ARG1, (HChar*)ARG1, SARG2, SARG3, ARG4);
       PRE_REG_READ4(vki_mqd_t, "mq_open",
                     const char *, name, int, oflag,
                     vki_mode_t, mode, struct vki_mq_attr *, attr);
@@ -6121,7 +6121,7 @@ POST(sys_mq_close)
 #if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
    if (VG_(clo_track_fds))
 #endif
-      ML_(record_fd_close)(ARG1);
+      ML_(record_fd_close)(tid, ARG1);
 }
 
 PRE(sys_mq_unlink)
