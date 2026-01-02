@@ -1283,7 +1283,7 @@ static int mutex_unlock_WRK(pthread_mutex_t *mutex)
    return ret;
 }
 
-#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
+#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
    PTH_FUNC(int, pthreadZumutexZuunlock, // pthread_mutex_unlock
             pthread_mutex_t *mutex) {
       return mutex_unlock_WRK(mutex);
@@ -3431,6 +3431,7 @@ static int sem_wait_WRK(sem_t* sem)
    PTH_FUNC(int, semZuwait, sem_t* sem) { /* sem_wait */
       return sem_wait_WRK(sem);
    }
+#else
 #  error "Unsupported OS"
 #endif
 
@@ -3491,6 +3492,10 @@ LIBC_FUNC(int, semZutrywait, sem_t* sem) { /* sem_trywait */
 }
 #elif defined(VGO_solaris)
 PTH_FUNC(int, semaZutrywait, sem_t *sem) { /* sema_trywait */
+   return sem_trywait_WRK(sem);
+   }
+#elif defined(VGO_netbsd)
+PTH_FUNC(int, semZutrywait, sem_t *sem) { /* sem_trywait */
    return sem_trywait_WRK(sem);
    }
 #else
@@ -3559,6 +3564,10 @@ PTH_FUNC(int, semZutimedwait, sem_t *sem, const struct timespec* abs_timeout) { 
    return sem_timedwait_WRK(sem, abs_timeout);
 }
 #endif
+#elif defined(VGO_netbsd)
+PTH_FUNC(int, semZutimedwait, sem_t *sem, const struct timespec* abs_timeout) { /* sem_timedwait */
+   return sem_timedwait_WRK(sem, abs_timeout);
+}
 #else
 #  error "Unsupported OS"
 #endif
