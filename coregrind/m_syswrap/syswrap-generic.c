@@ -5290,6 +5290,58 @@ PRE(sys_select)
       PRE_timeval_READ( "select(timeout)", (Addr)ARG5 );
 }
 
+// FIXME PJF should be in syswrap netbsd
+POST(sys_select)
+{
+   if (ARG2 != 0)
+      POST_MEM_WRITE( ARG2, sizeof(vki_fd_set) );
+   if (ARG3 != 0)
+      POST_MEM_WRITE( ARG3, sizeof(vki_fd_set) );
+   if (ARG4 != 0)
+      POST_MEM_WRITE( ARG4, sizeof(vki_fd_set) );
+}
+
+PRE(sys_pselect)
+{
+   *flags |= SfMayBlock;
+   PRINT("sys_pselect ( %ld, %#" FMT_REGWORD "x, %#" FMT_REGWORD "x, %#" 
+         FMT_REGWORD "x, %#" FMT_REGWORD "x, %#" FMT_REGWORD "x )",
+         SARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
+   PRE_REG_READ6(long, "pselect",
+                 int, nfds, vki_fd_set *, readfds, vki_fd_set *, writefds,
+                 vki_fd_set*, exceptfds, const struct vki_timeval *, timeout,
+                 const vki_sigset_t *, sigmask);
+   /* See comments on PRE(sys_select) */
+   if (ARG2 != 0)
+      PRE_MEM_WRITE( "select(readfds)",
+                     ARG2, sizeof(vki_fd_set) );
+   if (ARG3 != 0)
+      PRE_MEM_WRITE( "select(writefds)",
+                     ARG3, sizeof(vki_fd_set) );
+   if (ARG4 != 0)
+      PRE_MEM_WRITE( "select(exceptfds)",
+                     ARG4, sizeof(vki_fd_set) );
+   if (ARG5 != 0)
+      PRE_timeval_READ( "select(timeout)", ARG5 );
+
+   if (ARG6 != 0) {
+      vki_sigset_t *sigmask = (vki_sigset_t *)ARG6;
+
+      if (ML_(safe_to_deref)(sigmask, sizeof(*sigmask)))
+         VG_(sanitize_client_sigmask)(sigmask);
+   }
+}
+
+POST(sys_pselect)
+{
+   if (ARG2 != 0)
+      POST_MEM_WRITE( ARG2, sizeof(vki_fd_set) );
+   if (ARG3 != 0)
+      POST_MEM_WRITE( ARG3, sizeof(vki_fd_set) );
+   if (ARG4 != 0)
+      POST_MEM_WRITE( ARG4, sizeof(vki_fd_set) );
+}
+
 PRE(sys_setgid)
 {
    PRINT("sys_setgid ( %" FMT_REGWORD "u )", ARG1);
