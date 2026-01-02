@@ -764,11 +764,7 @@ POST(sys_pipe)
       VG_(close)(RESHI);
       SET_STATUS_Failure(VKI_EMFILE);
    }
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
    else if (VG_(clo_track_fds))
-#else
-   else
-#endif
    {
       ML_(record_fd_open_nameless)(tid, RES);
       ML_(record_fd_open_nameless)(tid, RESHI);
@@ -794,11 +790,7 @@ POST(sys_pipe2)
       VG_(close)(fildes[1]);
       SET_STATUS_Failure(VKI_EMFILE);
    }
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
    else if (VG_(clo_track_fds))
-#else
-   else
-#endif
    {
       ML_(record_fd_open_nameless)(tid, fildes[0]);
       ML_(record_fd_open_nameless)(tid, fildes[1]);
@@ -932,9 +924,7 @@ POST(sys_fcntl)
       /* These ones create a new fd. */
    case VKI_F_DUPFD:
    case VKI_F_DUPFD_CLOEXEC:
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_named)(tid, RES);
       break;
 

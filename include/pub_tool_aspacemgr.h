@@ -110,7 +110,7 @@ typedef
       Bool    hasT;     // True --> translations have (or MAY have)
                         // been taken from this segment
       Bool    isCH;     // True --> is client heap (SkAnonC ONLY)
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
       Bool    isFF;     // True --> is a fixed file mapping
       Bool    ignore_offset; // True --> we can't work out segment offset
 #endif

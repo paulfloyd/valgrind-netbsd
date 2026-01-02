@@ -197,7 +197,7 @@ Bool VG_(resolve_filename) ( Int fd, const HChar** result )
    return False;
 #endif
 
-#  elif defined(VGO_darwin)
+#  elif defined(VGO_darwin) || defined(VGO_netbsd)
    HChar tmp[VKI_MAXPATHLEN+1];
    if (0 == VG_(fcntl)(fd, VKI_F_GETPATH, (UWord)tmp)) {
       static HChar *buf = NULL;
@@ -213,7 +213,7 @@ Bool VG_(resolve_filename) ( Int fd, const HChar** result )
    *result = NULL;
    return False;
 
-# elif defined(VGO_netbsd)
+# elif defined(VGO_netbsd) && 0
 
    /* On this platform the only way to resolve a file name is to
     * lookup it in our recorded fd table. /proc/self/fd/# might exist

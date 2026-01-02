@@ -1536,7 +1536,7 @@ static void init_nsegment ( /*OUT*/NSegment* seg )
 
    seg->hasR     = seg->hasW = seg->hasX = seg->hasT
                  = seg->isCH = False;
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
    seg->isFF     = False;
    seg->ignore_offset = False;
 #endif
@@ -2334,7 +2334,7 @@ VG_(am_notify_client_mmap)( Addr a, SizeT len, UInt prot, UInt flags,
       if (ML_(am_resolve_filename)(fd, buf, VKI_PATH_MAX)) {
          seg.fnIdx = ML_(am_allocate_segname)( buf );
       }
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
       seg.isFF = (flags & VKI_MAP_FIXED);
 #endif
    }
@@ -2587,7 +2587,7 @@ SysRes VG_(am_mmap_named_file_fixed_client_flags)
    } else if (ML_(am_resolve_filename)(fd, buf, VKI_PATH_MAX)) {
       seg.fnIdx = ML_(am_allocate_segname)( buf );
    }
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
    seg.isFF = (flags & VKI_MAP_FIXED);
 #endif
 #if defined(VGO_darwin)
@@ -2911,7 +2911,7 @@ static SysRes VG_(am_mmap_file_float_valgrind_flags) ( SizeT length, UInt prot,
    if (ML_(am_resolve_filename)(fd, buf, VKI_PATH_MAX)) {
       seg.fnIdx = ML_(am_allocate_segname)( buf );
    }
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
    seg.isFF = (flags & VKI_MAP_FIXED);
 #endif
 #if defined(VGO_darwin)

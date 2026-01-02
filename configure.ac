@@ -1575,6 +1575,9 @@ AM_CONDITIONAL(VGCONF_PLATVARIANT_IS_ANDROID,
 # Checking for various library functions and other definitions
 #----------------------------------------------------------------------------
 
+# Check if we have F_GETPATH
+AC_CHECK_DECLS([F_GETPATH], [], [], [#include <fcntl.h>])
+
 # Check for AT_FDCWD
 
 AC_MSG_CHECKING([for AT_FDCWD])

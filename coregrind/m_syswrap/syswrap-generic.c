@@ -1449,9 +1449,7 @@ static void check_cmsg_for_fds(ThreadId tid, struct vki_msghdr *msg)
          Int i;
 
          for (i = 0; i < fdc; i++)
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
             if(VG_(clo_track_fds))
-#endif
                // XXX: must we check the range on these fds with
                //      ML_(fd_allowed)()?
                ML_(record_fd_open_named)(tid, fds[i]);
@@ -1892,11 +1890,7 @@ ML_(generic_POST_sys_socketpair) ( ThreadId tid,
       r = VG_(mk_SysRes_Error)( VKI_EMFILE );
    } else {
       POST_MEM_WRITE( arg3, 2*sizeof(int) );
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds)) {
-#else
-      if (1) {
-#endif
          ML_(record_fd_open_nameless)(tid, fd1);
          ML_(record_fd_open_nameless)(tid, fd2);
       }
@@ -1915,9 +1909,7 @@ ML_(generic_POST_sys_socket) ( ThreadId tid, SysRes res )
       VG_(close)(sr_Res(res));
       r = VG_(mk_SysRes_Error)( VKI_EMFILE );
    } else {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_nameless)(tid, sr_Res(res));
    }
    return r;
@@ -3873,9 +3865,7 @@ PRE(sys_close)
          only called on success. Even if the close syscall fails the
 	 file descriptor is still really closed/invalid. So we do the
 	 recording and checking here.  */
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_close)(tid, ARG1);
    }
 }
@@ -3894,9 +3884,7 @@ POST(sys_dup)
       VG_(close)(RES);
       SET_STATUS_Failure( VKI_EMFILE );
    } else {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_named)(tid, RES);
    }
 }
@@ -3914,9 +3902,7 @@ PRE(sys_dup2)
 POST(sys_dup2)
 {
    vg_assert(SUCCESS);
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
    if (VG_(clo_track_fds))
-#endif
       ML_(record_fd_open_named)(tid, RES);
 }
 
@@ -5035,12 +5021,7 @@ POST(sys_open)
       VG_(close)(RES);
       SET_STATUS_Failure( VKI_EMFILE );
    } else {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
-      /* Always track them on platforms like NetBSD which doesn't
-       * support resolving filename from fd. It's the only way to
-       * resolve them on those platforms. */
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_with_given_name)(tid, RES, (HChar*)(Addr)ARG1);
    }
 }
@@ -5107,9 +5088,7 @@ POST(sys_creat)
       VG_(close)(RES);
       SET_STATUS_Failure( VKI_EMFILE );
    } else {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_with_given_name)(tid, RES, (HChar*)(Addr)ARG1);
    }
 }
@@ -6100,9 +6079,7 @@ POST(sys_mq_open)
       SET_STATUS_Failure(VKI_EMFILE);
    }
    else {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
       if (VG_(clo_track_fds))
-#endif
          ML_(record_fd_open_with_given_name)(tid, RES, (HChar*)ARG1);
    }
 }
@@ -6119,9 +6096,7 @@ PRE(sys_mq_close)
 
 POST(sys_mq_close)
 {
-#if defined(OS_SUPPORTS_RESOLVING_FILENAME_FROM_FD)
    if (VG_(clo_track_fds))
-#endif
       ML_(record_fd_close)(tid, ARG1);
 }
 

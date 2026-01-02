@@ -511,7 +511,7 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    return False;
 #endif
 
-#elif defined(VGO_darwin)
+#elif defined(VGO_darwin) || defined(VGO_netbsd)
    HChar tmp[VKI_MAXPATHLEN+1];
    if (0 == ML_(am_fcntl)(fd, VKI_F_GETPATH, (UWord)tmp)) {
       if (nbuf > 0) {
@@ -532,7 +532,7 @@ Bool ML_(am_resolve_filename) ( Int fd, /*OUT*/HChar* buf, Int nbuf )
    else
       return False;
 
-# elif defined(VGO_netbsd)
+# elif defined(VGO_netbsd) && 0
    /* On this platform the only way to resolve a file name is to
     * lookup it in our recorded fd table. /proc/self/fd/# might exist
     * but even if they do they are (sort of) hard links, not symlinks.

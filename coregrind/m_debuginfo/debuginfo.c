@@ -1157,7 +1157,7 @@ ULong VG_(di_notify_mmap)( Addr a, Bool allow_SkFileV, Int use_fd )
 
    DebugInfo* di;
    Int        actual_fd, oflags;
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
    static Bool first_fixed_file = True;
 #endif
 
@@ -1326,7 +1326,7 @@ ULong VG_(di_notify_mmap)( Addr a, Bool allow_SkFileV, Int use_fd )
    if (!(is_rx_map || is_rw_map || is_ro_map))
       return 0;
 
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
    /* Ignore non-fixed read-only mappings.  The dynamic linker may be
     * mapping something for its own transient purposes. */
    if (!seg->isFF && is_ro_map) {
