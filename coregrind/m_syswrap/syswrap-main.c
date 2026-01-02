@@ -999,7 +999,7 @@ void getSyscallArgsFromGuestState ( /*OUT*/SyscallArgs*       canonical,
 #elif defined(VGP_amd64_netbsd)
    VexGuestAMD64State* gst = (VexGuestAMD64State*)gst_vanilla;
    UWord *stack = (UWord *)gst->guest_RSP;
-   canonical->sysno = gst->guest_RAX;
+   canonical->canonical_sysno = gst->guest_RAX;
    /* stack[0] is a return address. */
    canonical->arg1 = gst->guest_RDI;
    canonical->arg2 = gst->guest_RSI;
@@ -1303,9 +1303,8 @@ void putSyscallArgsIntoGuestState ( /*IN*/ SyscallArgs*       canonical,
    VexGuestAMD64State* gst = (VexGuestAMD64State*)gst_vanilla;
    UWord *stack = (UWord *)gst->guest_RSP;
 
-   gst->guest_RAX = canonical->sysno;
+   gst->guest_RAX = canonical->canonical_sysno;
 
-   gst->guest_RAX = canonical->sysno;
    /* stack[0] is a return address. */
    gst->guest_RDI = canonical->arg1;
    gst->guest_RSI = canonical->arg2;

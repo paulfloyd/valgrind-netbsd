@@ -56,7 +56,7 @@ void VG_(sigframe_create) ( ThreadId tid,
                             const vki_sigset_t *mask,
 #if defined(VGO_netbsd)
                             void *trampoline,
-                            UInt tramp_abi
+                            UInt tramp_abi,
 #endif
                             void *restorer
                           );

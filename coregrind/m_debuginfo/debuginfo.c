@@ -2566,6 +2566,8 @@ Vg_FnNameKind VG_(get_fnname_kind) ( const HChar* name )
        VG_STREQ("start_according_to_valgrind", name) ||  // Darwin, darling
 #      elif defined(VGO_solaris)
        VG_STREQ("_start", name) || // main() is called directly from _start
+#      elif defined(VGO_netbsd)
+       VG_STREQ("___start", name) || // See /usr/src/lib/csu/common/crt0-common.c
 #      else
 #        error "Unknown OS"
 #      endif

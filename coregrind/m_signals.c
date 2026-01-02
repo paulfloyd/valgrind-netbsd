@@ -752,6 +752,7 @@ typedef
       vki_sigset_t scss_mask;
       void* scss_restorer; /* where sigreturn goes */
       void* scss_sa_tramp; /* sa_tramp setting, Darwin only */
+      UInt  scss_tramp_abi; /* trampoline ABI version, NetBSD only */
       /* re _restorer and _sa_tramp, we merely record the values
          supplied when the client does 'sigaction' and give them back
          when requested.  Otherwise they are simply ignored. */
@@ -1108,8 +1109,8 @@ extern void my_sigreturn(void);
    "   unimp\n" \
    ".previous\n"
 
-#elif defined(VGP_x86_solaris) || defined(VGP_amd64_solaris)
-/* Not used on Solaris. */
+#elif defined(VGP_x86_solaris) || defined(VGP_amd64_solaris) || defined(VGP_amd64_netbsd)
+/* Not used on Solaris or NetBSD. */
 #  define _MY_SIGRETURN(name) \
    ".text\n" \
    ".globl my_sigreturn\n" \
@@ -1421,6 +1422,11 @@ SysRes VG_(do_sys_sigaction) ( Int signo,
       VG_(umsg)("         the %s signal is uncatchable\n", 
                 VG_(signame)(signo));
    }
+  bad_trampoline:
+   if (VG_(showing_core_warnings)() && !VG_(clo_xml)) {
+      VG_(umsg)("Warning: bad signal trampoline for %s handler in sigaction();\n",
+                VG_(signame)(signo));
+   }
    return VG_(mk_SysRes_Error)( VKI_EINVAL );
 }
 
@@ -1634,6 +1640,10 @@ void push_signal_frame ( ThreadId tid, const vki_siginfo_t *siginfo,
                          scss.scss_per_sig[sigNo].scss_handler,
                          scss.scss_per_sig[sigNo].scss_flags,
                          &tst->sig_mask,
+#if defined(VGO_netbsd)
+                         scss.scss_per_sig[sigNo].scss_sa_tramp,
+                         scss.scss_per_sig[sigNo].scss_tramp_abi,
+#endif
                          scss.scss_per_sig[sigNo].scss_restorer);
 }
 
@@ -1740,7 +1750,7 @@ void VG_(kill_self)(Int sigNo)
    sa.ksa_handler = VKI_SIG_DFL;
    sa.sa_flags = 0;
 #  if !defined(VGP_riscv64_linux) && !defined(VGO_darwin) && \
-      !defined(VGO_freebsd) && !defined(VGO_solaris)
+      !defined(VGO_freebsd) && !defined(VGO_solaris)  && !defined(VGO_netbsd)
    sa.sa_restorer = 0;
 #  endif
    VG_(sigemptyset)(&sa.sa_mask);
@@ -1768,14 +1778,14 @@ void VG_(kill_self)(Int sigNo)
 // request (SI_ASYNCIO).  There's lots of implementation-defined leeway in
 // POSIX, but the user vs. kernal distinction is what we want here.  We also
 // pass in some other details that can help when si_code is unreliable.
-static Bool is_signal_from_kernel(ThreadId tid, int signum, int si_code)
+static Bool is_signal_from_kernel(ThreadId tid, int signum, int si_code_)
 {
-#  if defined(VGO_linux) || defined(VGO_solaris)
+#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_netbsd)
    // On Linux, SI_USER is zero, negative values are from the user, positive
    // values are from the kernel.  There are SI_FROMUSER and SI_FROMKERNEL
    // macros but we don't use them here because other platforms don't have
    // them.
-   return ( si_code > VKI_SI_USER ? True : False );
+   return ( si_code_ > VKI_SI_USER ? True : False );
 #elif defined(VGO_freebsd)
 
     // The comment below seems a bit out of date. From the siginfo manpage
@@ -1783,7 +1793,7 @@ static Bool is_signal_from_kernel(ThreadId tid, int signum, int si_code)
     // Full support for POSIX signal information first appeared in FreeBSD 7.0.
     // The codes SI_USER and SI_KERNEL can be generated as of FreeBSD 8.1.  The
     // code SI_LWP can be	generated as of	FreeBSD	9.0.
-    if (si_code == VKI_SI_USER || si_code == VKI_SI_LWP)
+    if (si_code_ == VKI_SI_USER || si_code_ == VKI_SI_LWP)
         return False;
 
    // It looks like there's no reliable way to say where the signal came from
@@ -1811,7 +1821,7 @@ static Bool is_signal_from_kernel(ThreadId tid, int signum, int si_code)
 
    // If it's a SIGSEGV, use the proper condition, since it's fairly reliable.
    } else if (SIGSEGV == signum) {
-      return ( si_code > 0 ? True : False );
+      return ( si_code_ > 0 ? True : False );
 
    // If it's anything else, assume it's kernel-generated.  Reason being that
    // kernel-generated sync signals are more common, and it's probable that
@@ -2045,7 +2055,7 @@ static void default_action(const vki_siginfo_t *info, ThreadId tid)
          likely cause a segfault. */
       if (VG_(is_valid_tid)(tid)) {
          Word first_ip_delta = 0;
-#if defined(VGO_linux) || defined(VGO_solaris)
+#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_netbsd)
          /* Make sure that the address stored in the stack pointer is 
             located in a mapped page. That is not necessarily so. E.g.
             consider the scenario where the stack pointer was decreased
@@ -2254,7 +2264,7 @@ static void resume_scheduler(ThreadId tid)
    }
 }
 
-static void synth_fault_common(ThreadId tid, Addr addr, Int si_code)
+static void synth_fault_common(ThreadId tid, Addr addr, Int si_code_)
 {
    vki_siginfo_t info;
 
@@ -2262,7 +2272,7 @@ static void synth_fault_common(ThreadId tid, Addr addr, Int si_code)
 
    VG_(memset)(&info, 0, sizeof(info));
    info.si_signo = VKI_SIGSEGV;
-   info.si_code = si_code;
+   info.si_code = si_code_;
    info.VKI_SIGINFO_si_addr = (void*)addr;
 
    /* Even if gdbserver indicates to ignore the signal, we must deliver it.
@@ -2495,7 +2505,7 @@ static vki_siginfo_t *next_queued(ThreadId tid, const vki_sigset_t *set)
    return ret;
 }
 
-static int sanitize_si_code(int si_code)
+static int sanitize_si_code(int si_code_)
 {
 #if defined(VGO_linux)
    /* The linux kernel uses the top 16 bits of si_code for it's own
@@ -2506,9 +2516,9 @@ static int sanitize_si_code(int si_code)
       The kernel treats the bottom 16 bits as signed and (when it does
       mask them off) sign extends them when exporting to user space so
       we do the same thing here. */
-   return (Short)si_code;
+   return (Short)si_code_;
 #elif defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
-   return si_code;
+   return si_code_;
 #else
 #  error Unknown OS
 #endif
@@ -3139,7 +3149,7 @@ void pp_ksigaction ( vki_sigaction_toK_t* sa )
                sa->ksa_handler, 
                (UInt)sa->sa_flags, 
 #              if !defined(VGP_riscv64_linux) && !defined(VGO_darwin) && \
-                  !defined(VGO_freebsd) && !defined(VGO_solaris)
+                  !defined(VGO_freebsd) && !defined(VGO_solaris) && !defined(VGO_netbsd)
                   sa->sa_restorer
 #              else
                   (void*)0
@@ -3162,7 +3172,7 @@ void VG_(set_default_handler)(Int signo)
    sa.ksa_handler = VKI_SIG_DFL;
    sa.sa_flags = 0;
 #  if !defined(VGP_riscv64_linux) && !defined(VGO_darwin) && \
-      !defined(VGO_freebsd) && !defined(VGO_solaris)
+      !defined(VGO_freebsd) && !defined(VGO_solaris) && !defined(VGO_netbsd)
    sa.sa_restorer = 0;
 #  endif
 #  if defined(VGO_netbsd)
@@ -3288,7 +3298,7 @@ void VG_(sigstartup_actions) ( void )
 	 tsa.ksa_handler = (void *)sync_signalhandler;
 	 tsa.sa_flags = VKI_SA_SIGINFO;
 #        if !defined(VGP_riscv64_linux) && !defined(VGO_darwin) && \
-            !defined(VGO_freebsd) && !defined(VGO_solaris)
+            !defined(VGO_freebsd) && !defined(VGO_solaris) && !defined(VGO_netbsd)
 	 tsa.sa_restorer = 0;
 #        endif
 	 VG_(sigfillset)(&tsa.sa_mask);

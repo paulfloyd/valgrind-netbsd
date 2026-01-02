@@ -67,7 +67,7 @@ HChar** VG_(client_envp) = NULL;
 const HChar *VG_(libdir) = VG_LIBDIR;
 
 const HChar *VG_(LD_PRELOAD_var_name) =
-#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
+#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
    "LD_PRELOAD";
 #elif defined(VGO_darwin)
    "DYLD_INSERT_LIBRARIES";
@@ -348,7 +348,7 @@ void VG_(client_cmd_and_args)(HChar *buffer, SizeT buf_size)
 
 Int VG_(waitpid)(Int pid, Int *status, Int options)
 {
-#  if defined(VGO_linux) || defined(VGO_freebsd)
+#  if defined(VGO_linux) || defined(VGO_freebsd) || defined(VGO_netbsd)
    SysRes res = VG_(do_syscall4)(__NR_wait4,
                                  pid, (UWord)status, options, 0);
    return sr_isError(res) ? -1 : sr_Res(res);
@@ -757,7 +757,7 @@ Int VG_(getpgrp) ( void )
 #  if defined(VGP_arm64_linux) || defined(VGP_nanomips_linux) \
       || defined(VGP_riscv64_linux)
    return sr_Res( VG_(do_syscall1)(__NR_getpgid, 0) );
-#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
+#  elif defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
    return sr_Res( VG_(do_syscall0)(__NR_getpgrp) );
 #  elif defined(VGO_solaris)
    /* Uses the shared pgrpsys syscall, 0 for the getpgrp variant. */
@@ -770,7 +770,8 @@ Int VG_(getpgrp) ( void )
 Int VG_(getppid) ( void )
 {
    /* ASSUMES SYSCALL ALWAYS SUCCEEDS */
-#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
+#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
+   return sr_Res( VG_(do_syscall0)(__NR_getppid) );
    return sr_Res( VG_(do_syscall0)(__NR_getppid) );
 #  elif defined(VGO_solaris)
    /* Uses the shared getpid/getppid syscall, val2 contains a parent pid. */
@@ -804,7 +805,7 @@ Int VG_(geteuid) ( void )
 
 Int VG_(getegid) ( void )
 {
-#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd)
+#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_freebsd) || defined(VGO_netbsd)
    /* ASSUMES SYSCALL ALWAYS SUCCEEDS */
 #    if defined(__NR_getegid32)
    // We use the 32-bit version if it's supported.  Otherwise, IDs greater
@@ -1019,7 +1020,7 @@ UInt VG_(read_millisecond_timer) ( void )
    static ULong base = 0;
    ULong  now;
 
-#  if defined(VGO_linux) || defined(VGO_solaris)
+#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_netbsd)
    { SysRes res;
      struct vki_timespec ts_now;
      res = VG_(do_syscall2)(__NR_clock_gettime, VKI_CLOCK_MONOTONIC,
@@ -1082,7 +1083,7 @@ void VG_(clock_gettime) ( struct vki_timespec *ts, vki_clockid_t clk_id )
                            (UWord)ts);
     vg_assert (sr_isError(res) == 0);
 }
-#  elif defined(VGO_darwin)
+#  elif defined(VGO_darwin) || defined(VGO_netbsd)
   /* See pub_tool_libcproc.h */
 #  else
 #    error "Unknown OS"
@@ -1134,6 +1135,13 @@ UInt VG_(get_user_milliseconds)(void)
       if (!sr_isError(sr)) {
          res = ru.ru_utime.tv_sec * 1000 + ru.ru_utime.tv_usec / 1000;
       }
+   }
+
+#  elif defined(VGO_netbsd)
+   {
+      //Unsure if this is the proper way to do this for NetBSD
+      //Placeholder
+      res = 0;
    }
 
 #  elif defined(VGO_darwin)

@@ -224,9 +224,8 @@ Bool VG_(resolve_filename) ( Int fd, const HChar** result )
       *result = VG_(strdup)("resolve_filename", rec);
       return True;
    }
-   else {
-      *result = NULL;
-      return False;
+   *result = NULL;
+   return False;
 
 #  else
 #     error Unknown OS
@@ -765,11 +764,9 @@ struct vki_stat buf;
 #elif defined(VGO_netbsd)
 
    // FIXME PJF should be __NR_fstatat
-   // FIXME PJF should be VKI_AT_FDCWD
-   // FIXME PJF should be VKI_AT_SYMLINK_NOFOLLOW
 
    struct vki_stat buf;
-   res = VG_(do_syscall4)(SYS_fstatat, AT_FDCWD, (UWord)file_name, (UWord)&buf, AT_SYMLINK_NOFOLLOW);
+   res = VG_(do_syscall4)(SYS_fstatat, VKI_AT_FDCWD, (UWord)file_name, (UWord)&buf, VKI_AT_SYMLINK_NOFOLLOW);
 
 #else
 
@@ -1408,7 +1405,7 @@ UShort VG_(ntohs) ( UShort x )
 */
 Int VG_(connect_via_socket)( const HChar* str )
 {
-#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd)
+#  if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
    Int sd, res;
    struct vki_sockaddr_in servAddr;
    UInt   ip   = 0;

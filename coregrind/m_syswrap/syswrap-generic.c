@@ -286,19 +286,26 @@ SysRes do_mremap( Addr old_addr, SizeT old_len,
    Bool      ok, d;
    NSegment const* old_seg;
    Addr      advised;
+#if defined(VGO_netbsd)
+   Bool      f_fixed   = toBool(flags & VKI_MAP_FIXED);
+   Bool      f_maymove = True;
+#else
    Bool      f_fixed   = toBool(flags & VKI_MREMAP_FIXED);
    Bool      f_maymove = toBool(flags & VKI_MREMAP_MAYMOVE);
+#endif
 
    if (0)
       VG_(printf)("do_remap (old %#lx %lu) (new %#lx %lu) %s %s\n",
                   old_addr,old_len,new_addr,new_len, 
-                  flags & VKI_MREMAP_MAYMOVE ? "MAYMOVE" : "",
-                  flags & VKI_MREMAP_FIXED ? "FIXED" : "");
+                  f_maymove ? "MAYMOVE" : "",
+                  f_fixed   ? "FIXED" : "");
    if (0)
       VG_(am_show_nsegments)(0, "do_remap: before");
 
+#if !defined(VGO_netbsd)
    if (flags & ~(VKI_MREMAP_FIXED | VKI_MREMAP_MAYMOVE))
       goto eINVAL;
+#endif
 
    if (!VG_IS_PAGE_ALIGNED(old_addr))
       goto eINVAL;
@@ -1141,6 +1148,52 @@ void VG_(init_preopened_fds)(void)
       while (i < ret) {
          /* Proceed one entry. */
          struct vki_dirent64 *d = (struct vki_dirent64 *) (buf + i);
+         if (VG_(strcmp)(d->d_name, ".") && VG_(strcmp)(d->d_name, "..")) {
+            HChar *s;
+            Int fno = VG_(strtoll10)(d->d_name, &s);
+            if (*s == '\0') {
+               if (fno != sr_Res(f))
+                  if (VG_(clo_track_fds))
+                     ML_(record_fd_open_named)(-1, fno);
+            } else {
+               VG_(message)(Vg_DebugMsg,
+                     "Warning: invalid file name in /proc/self/fd: %s\n",
+                     d->d_name);
+            }
+         }
+
+         /* Move on the next entry. */
+         i += d->d_reclen;
+      }
+   }
+
+   VG_(close)(sr_Res(f));
+
+#elif defined(VGO_netbsd)
+   Int ret;
+   SysRes f;
+   struct vg_stat st;
+
+   f = VG_(open)("/proc/self/fd", VKI_O_RDONLY, 0);
+   if (sr_isError(f)) {
+      init_preopened_fds_without_proc_self_fd();
+      return;
+   }
+
+   /* We need to know the block size of the directory in order to get
+    * the needed size of getdents(2) buffer. */
+   if ((ret = VG_(fstat)(sr_Res(f), &st)) != 0) {
+      init_preopened_fds_without_proc_self_fd();
+      return;
+   }
+
+   Char buf[st.blksize];
+   while ((ret = VG_(getdents)(sr_Res(f), (struct vki_dirent *) buf,
+                               sizeof(buf))) > 0) {
+      Int i = 0;
+      while (i < ret) {
+         /* Proceed one entry. */
+         struct vki_dirent *d = (struct vki_dirent *) (buf + i);
          if (VG_(strcmp)(d->d_name, ".") && VG_(strcmp)(d->d_name, "..")) {
             HChar *s;
             Int fno = VG_(strtoll10)(d->d_name, &s);
@@ -3132,6 +3185,19 @@ PRE(sys_madvise)
 #if HAVE_MREMAP
 PRE(sys_mremap)
 {
+#if defined(VGO_netbsd)
+   PRINT("sys_mremap ( %#" FMT_REGWORD "x, %" FMT_REGWORD "u, %#"
+         FMT_REGWORD "x, %" FMT_REGWORD "u, %#" FMT_REGWORD "x )",
+         ARG1, ARG2, ARG3, ARG4, ARG5);
+   PRE_REG_READ5(unsigned long, "mremap",
+                 unsigned long, oldp, unsigned long, oldsize,
+                 unsigned long, newp, unsigned long, newsize,
+                 unsigned long, flags);
+   SET_STATUS_from_SysRes(
+      do_mremap((Addr)ARG1, ARG2, (Addr)ARG3, ARG4, ARG5, tid)
+   );
+
+#else
    // Nb: this is different to the glibc version described in the man pages,
    // which lacks the fifth 'new_address' argument.
    if (ARG4 & VKI_MREMAP_FIXED) {
@@ -3152,18 +3218,6 @@ PRE(sys_mremap)
    }
    SET_STATUS_from_SysRes( 
       do_mremap((Addr)ARG1, ARG2, (Addr)ARG5, ARG3, ARG4, tid) 
-   );
-
-#  elif defined(VGO_netbsd)
-   PRINT("sys_mremap ( %#" FMT_REGWORD "x, %" FMT_REGWORD "u, %#"
-         FMT_REGWORD "x, %" FMT_REGWORD "u, %#" FMT_REGWORD "x )",
-         ARG1, ARG2, ARG3, ARG4, ARG5);
-   PRE_REG_READ5(unsigned long, "mremap",
-                 unsigned long, oldp, unsigned long, oldsize,
-                 unsigned long, newp, unsigned long, newsize,
-                 unsigned long, flags);
-   SET_STATUS_from_SysRes(
-      do_mremap((Addr)ARG1, ARG2, (Addr)ARG3, ARG4, ARG5, tid)
    );
 
 #  endif
@@ -3246,7 +3300,7 @@ PRE(sys_sync)
    PRE_REG_READ0(long, "sync");
 }
 
-#if !defined(VGP_nanomips_linux)
+#if !defined(VGP_nanomips_linux) && defined(vki_statfs)
 PRE(sys_fstatfs)
 {
    FUSE_COMPATIBLE_MAY_BLOCK();

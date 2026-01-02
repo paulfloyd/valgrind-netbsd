@@ -316,6 +316,9 @@ typedef ucontext_t     vki_ucontext_t;
 #define VKI_O_WRONLY        O_WRONLY
 #define vki_flock           flock
 
+#define VKI_AT_FDCWD        AT_FDCWD
+#define VKI_AT_SYMLINK_NOFOLLOW AT_SYMLINK_NOFOLLOW
+
 #include <sys/ioccom.h>
 #define _VKI_IOC_DIR(x)  ((x) & IOC_DIRMASK)
 #define _VKI_IOC_SIZE(x) IOCPARM_LEN(x)
