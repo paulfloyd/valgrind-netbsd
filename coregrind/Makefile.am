@@ -304,6 +304,7 @@ noinst_HEADERS = \
 	m_syswrap/priv_syswrap-freebsd.h \
 	m_syswrap/priv_syswrap-darwin.h \
 	m_syswrap/priv_syswrap-solaris.h \
+        m_syswrap/priv_syswrap-netbsd.h \
 	m_syswrap/priv_syswrap-main.h \
 	m_syswrap/priv_syswrap-xen.h \
 	m_ume/priv_ume.h \
@@ -440,6 +441,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_initimg/initimg-freebsd.c \
 	m_initimg/initimg-darwin.c \
 	m_initimg/initimg-solaris.c \
+	m_initimg/initimg-netbsd.c \
 	m_mach/mach_basics.c \
 	m_mach/mach_msg.c \
 	m_mach/mach_traps-x86-darwin.S \
@@ -517,6 +519,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_syswrap/syswrap-xen.c \
 	m_syswrap/syswrap-x86-solaris.c \
 	m_syswrap/syswrap-amd64-solaris.c \
+	m_syswrap/syswrap-amd64-netbsd.c \
 	m_ume/elf.c \
 	m_ume/macho.c \
 	m_ume/main.c \

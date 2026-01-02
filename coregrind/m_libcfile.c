@@ -1073,6 +1073,14 @@ Int VG_(getdents64) (Int fd, struct vki_dirent64 *dirp, UInt count)
 }
 #endif
 
+#if defined(VGO_netbsd)
+Int VG_(getdents) (Int fd, struct vki_dirent *dirp, UInt count)
+{
+   SysRes res = VG_(do_syscall3)(__NR_getdents, fd, (UWord)dirp, count);
+   return sr_isError(res) ? -1 : sr_Res(res);
+}
+#endif
+
 /* Check accessibility of a file.  Returns zero for access granted,
    nonzero otherwise. */
 Int VG_(access) ( const HChar* path, Bool irusr, Bool iwusr, Bool ixusr )
