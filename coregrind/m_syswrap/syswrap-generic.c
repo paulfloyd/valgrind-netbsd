@@ -3991,7 +3991,7 @@ PRE(sys_fork)
 
    if (!SUCCESS) return;
 
-#if defined(VGO_linux) || defined(VGO_freebsd)
+#if defined(VGO_linux) || defined(VGO_freebsd) || defined(VGO_netbsd)
    // RES is 0 for child, non-0 (the child's PID) for parent.
    is_child = ( RES == 0 ? True : False );
    child_pid = ( is_child ? -1 : RES );
@@ -5423,7 +5423,7 @@ POST(sys_newstat)
 }
 #endif
 
-#if !defined(VGP_nanomips_linux)
+#if !defined(VGP_nanomips_linux) && defined(vki_statfs)
 PRE(sys_statfs)
 {
    FUSE_COMPATIBLE_MAY_BLOCK();
