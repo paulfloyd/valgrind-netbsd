@@ -334,6 +334,14 @@ Addr setup_client_stack( void*  init_sp,
    /* use our own auxv as a prototype */
    const struct auxv *orig_auxv = find_auxv(init_sp);
 
+   const HChar *exe_name = VG_(find_executable)(VG_(args_the_exename));
+   HChar interp_name[VKI_PATH_MAX];
+   if (VG_(try_get_interp)(exe_name, interp_name, VKI_PATH_MAX)) {
+      exe_name = interp_name;
+   }  
+   HChar resolved_name[VKI_PATH_MAX];
+   VG_(realpath)(exe_name, resolved_name);
+
    /* ==================== compute sizes ==================== */
 
    /* first of all, work out how big the client stack will be */
@@ -616,6 +624,10 @@ Addr setup_client_stack( void*  init_sp,
    vg_assert((strtab-stringbase) == stringsize);
 
    /* client_SP is pointing at client's argc/argv */
+
+   if (VG_(resolved_exename) == NULL) {
+      VG_(resolved_exename) = VG_(strdup)("initimg-netbsd.sre.1", resolved_name);
+   }
 
    if (0) VG_(printf)("startup SP = %#lx\n", client_SP);
    return client_SP;
