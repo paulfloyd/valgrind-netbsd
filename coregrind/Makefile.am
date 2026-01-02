@@ -371,6 +371,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_coredump/coredump-elf.c \
 	m_coredump/coredump-macho.c \
 	m_coredump/coredump-solaris.c \
+	m_coredump/coredump-netbsd.c \
 	m_debuginfo/misc.c \
 	m_debuginfo/d3basics.c \
 	m_debuginfo/debuginfo.c \
@@ -468,6 +469,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_sigframe/sigframe-x86-darwin.c \
 	m_sigframe/sigframe-amd64-darwin.c \
 	m_sigframe/sigframe-solaris.c \
+	m_sigframe/sigframe-netbsd.c \
 	m_syswrap/syscall-x86-linux.S \
 	m_syswrap/syscall-amd64-linux.S \
 	m_syswrap/syscall-ppc32-linux.S \
@@ -487,6 +489,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_syswrap/syscall-amd64-darwin.S \
 	m_syswrap/syscall-x86-solaris.S \
 	m_syswrap/syscall-amd64-solaris.S \
+	m_syswrap/syscall-amd64-netbsd.S \
 	m_syswrap/syswrap-main.c \
 	m_syswrap/syswrap-generic.c \
 	m_syswrap/syswrap-linux.c \
@@ -494,6 +497,7 @@ COREGRIND_SOURCES_COMMON = \
 	m_syswrap/syswrap-freebsd.c \
 	m_syswrap/syswrap-darwin.c \
 	m_syswrap/syswrap-solaris.c \
+	m_syswrap/syswrap-netbsd.c \
 	m_syswrap/syswrap-x86-linux.c \
 	m_syswrap/syswrap-amd64-linux.c \
 	m_syswrap/syswrap-ppc32-linux.c \

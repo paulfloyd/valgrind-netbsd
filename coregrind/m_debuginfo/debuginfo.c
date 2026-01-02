@@ -57,7 +57,7 @@
 #include "priv_tytypes.h"
 #include "priv_storage.h"
 #include "priv_readdwarf.h"
-#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
+#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
 # include "priv_readelf.h"
 # include "priv_readdwarf3.h"
 #elif defined(VGO_darwin)
@@ -837,7 +837,7 @@ void VG_(di_initialise) ( void )
 /*---                                                        ---*/
 /*--------------------------------------------------------------*/
 
-#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd)
+#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
 
 /* Helper (indirect) for di_notify_ACHIEVE_ACCEPT_STATE */
 static Bool overlaps_DebugInfoMappings ( const DebugInfoMapping* map1,
@@ -988,7 +988,7 @@ static ULong di_notify_ACHIEVE_ACCEPT_STATE ( struct _DebugInfo* di )
    truncate_DebugInfoMapping_overlaps( di, di->fsm.maps );
 
    /* And acquire new info. */
-#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
+#  if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd) || defined(VGO_netbsd)
    ok = ML_(read_elf_object)( di );
    if (ok)
       di->deferred = True;
