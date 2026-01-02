@@ -36,6 +36,7 @@
 
 #include "priv_aspacemgr.h"
 #include "pub_core_libcassert.h"
+#include "pub_core_syswrap.h"
 #include "config.h"
 
 

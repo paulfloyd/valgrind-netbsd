@@ -105,6 +105,7 @@
 #define __NR_mknod              SYS___mknod50
 #define __NR_mmap               SYS_mmap
 #define __NR_mprotect           SYS_mprotect
+#define __NR_madvise            SYS_madvise
 #define __NR_mq_close           SYS_mq_close
 #define __NR_mq_getattr         SYS_mq_getattr
 #define __NR_mq_notify          SYS_mq_notify

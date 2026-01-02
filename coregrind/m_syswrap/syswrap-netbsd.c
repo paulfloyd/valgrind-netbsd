@@ -1576,6 +1576,7 @@ static SyscallTableEntry syscall_table[] = {
    GENX_(__NR_execve,               sys_execve),                /*  59 */
    GENXY(__NR_munmap,               sys_munmap),                /*  73 */
    GENXY(__NR_mprotect,             sys_mprotect),              /*  74 */
+   GENX_(__NR_madvise,              sys_madvise),               /*  75 */
    GENX_(__NR_getpgrp,              sys_getpgrp),               /*  81 */
    GENXY(__NR_dup2,                 sys_dup2),                  /*  90 */
    NBDXY(__NR_fcntl,                sys_fcntl),                 /*  92 */

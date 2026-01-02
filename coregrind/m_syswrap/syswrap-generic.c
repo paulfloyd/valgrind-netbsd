@@ -62,6 +62,7 @@
 
 #include "priv_types_n_macros.h"
 #include "priv_syswrap-generic.h"
+#include "priv_syswrap-main.h"
 
 #include "config.h"
 
