@@ -1,3 +1,10 @@
+{
+   NetBSD-__vfprintf_unlocked_l
+   Memcheck:Cond
+   fun:__vfprintf_unlocked_l
+}
+
+
 # NetBSD ld.elf_so uses its own implementation of mutex based on
 # memory barriers and atomic ops, which results in false negatives
 # detected by Helgrind.
