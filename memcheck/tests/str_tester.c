@@ -908,7 +908,7 @@ test_strsep (void)
   equal(one+4, "c", 50);
 
   {
-#   if !defined(__APPLE__) && !defined(__FreeBSD__)
+#   if !defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__NetBSD__)
     char text[] = "This,is,a,test";
     char *list = strdupa (text);
     equal (strsep (&list, ","), "This", 51);

@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-#if defined(VGO_freebsd)
+#if defined(VGO_freebsd) || defined(VGO_netbsd)
 #include <signal.h>
 #endif
 

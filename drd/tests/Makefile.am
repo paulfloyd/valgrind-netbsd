@@ -430,7 +430,6 @@ check_PROGRAMS =      \
   pth_inconsistent_cond_wait \
   pth_mutex_reinit    \
   pth_mutex_signal    \
-  pth_process_shared_mutex   \
   recursive_mutex     \
   rwlock_race         \
   rwlock_test         \
@@ -466,8 +465,14 @@ check_PROGRAMS +=        \
 endif
 
 if !VGCONF_OS_IS_FREEBSD
+if !VGCONF_OS_IS_NETBSD
 check_PROGRAMS += tsan_unittest \
   pth_uninitialized_cond
+endif
+endif
+
+if !VGCONF_OS_IS_NETBSD
+check_PROGRAMS += pth_process_shared_mutex
 endif
 
 # clang 3.3 will generate errors about libstdc++ headers from 
@@ -550,7 +555,11 @@ concurrent_close_SOURCES    = concurrent_close.cpp
 if VGCONF_OS_IS_FREEBSD
 dlopen_main_LDADD           = ${LDADD}
 else
+if VGCONF_OS_IS_NETBSD
+dlopen_main_LDADD           = ${LDADD}
+else
 dlopen_main_LDADD           = -ldl
+endif
 endif
 dlopen_lib_so_SOURCES       = dlopen_lib.c
 dlopen_lib_so_CFLAGS        = -fPIC

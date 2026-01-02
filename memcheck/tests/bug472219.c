@@ -2,6 +2,9 @@
 #include <poll.h>
 #include <stdlib.h>
 #include "../../config.h"
+#if defined(VGO_netbsd)
+#include <sys/timespec.h>
+#endif
 
 int main()
 {

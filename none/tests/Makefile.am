@@ -360,15 +360,15 @@ endif
 
 # This doesn't appear to be compilable on Darwin.
 if ! VGCONF_OS_IS_DARWIN_OR_FREEBSD
+if !VGCONF_OS_IS_NETBSD
    check_PROGRAMS += rlimit64_nofile
+endif
 endif
 
 if ! VGCONF_OS_IS_DARWIN
+if ! VGCONF_OS_IS_NETBSD
    check_PROGRAMS += ppoll_alarm
 endif
-if ! VGCONF_OS_IS_NETBSD
-   check_PROGRAMS += rlimit64_nofile \
-        ppoll_alarm
 endif
 
 # older (?) clang does not know -ansi

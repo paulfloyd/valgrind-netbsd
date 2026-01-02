@@ -15,7 +15,7 @@ int main(void)
 
    (void)VALGRIND_MAKE_MEM_UNDEFINED(&size, sizeof(size));
    (void)VALGRIND_MAKE_MEM_UNDEFINED(&align, sizeof(align));
-#if !defined(VGO_darwin)
+#if !defined(VGO_darwin) && !defined(VGO_netbsd)
    p = memalign(align, size);
    free(p);
 #endif
