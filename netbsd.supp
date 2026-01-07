@@ -27,3 +27,11 @@
    Helgrind:Race
    fun:pthread__find
 }
+
+# should be in separate file
+{
+   <insert_a_suppression_name_here>
+   Helgrind:Race
+   ...
+   obj:/libexec/ld.elf_so
+}
