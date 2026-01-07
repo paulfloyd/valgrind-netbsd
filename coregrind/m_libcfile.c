@@ -918,7 +918,7 @@ void VG_(record_startup_wd) ( void )
       szB += 500;
       startup_wd = VG_(realloc)("startup_wd", startup_wd, szB);
       VG_(memset)(startup_wd, 0, szB);
-#   if defined(VGO_linux) || defined(VGO_solaris)
+#   if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_netbsd)
       res = VG_(do_syscall2)(__NR_getcwd, (UWord)startup_wd, szB-1);
 #   elif defined(VGO_freebsd)
       res = VG_(do_syscall2)(__NR___getcwd, (UWord)startup_wd, szB-1);
