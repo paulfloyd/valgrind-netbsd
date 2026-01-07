@@ -739,12 +739,6 @@ void drd__atfork_child(ThreadId tid)
 
 static void DRD_(post_clo_init)(void)
 {
-#if defined(VGO_linux) || defined(VGO_darwin) || defined(VGO_solaris) || defined(VGO_freebsd)
-   /* fine */
-#else
-   VG_(printf)("\nWARNING: DRD has not yet been tested on this operating system.\n\n");
-#  endif
-
    if (s_var_info)
    {
       VG_(needs_var_info)();
