@@ -227,6 +227,7 @@ typedef size_t vki_size_t;
 #include <time.h>
 #define VKI_CLOCK_MONOTONIC CLOCK_MONOTONIC
 typedef clockid_t           vki_clockid_t;
+typedef timer_t             vki_timer_t;
 typedef time_t              vki_time_t;
 #define vki_timespec        timespec
 

@@ -450,6 +450,7 @@ DECL_TEMPLATE(netbsd, sys_setcontext);
 DECL_TEMPLATE(netbsd, sys_lwp_create);
 DECL_TEMPLATE(netbsd, sys_lwp_exit);
 DECL_TEMPLATE(netbsd, sys_lwp_self);
+DECL_TEMPLATE(netbsd, sys_lwp_wait);
 DECL_TEMPLATE(netbsd, sys_lwp_wakeup);
 DECL_TEMPLATE(netbsd, sys_lwp_getprivate);
 DECL_TEMPLATE(netbsd, sys_lwp_setprivate);
@@ -463,6 +464,7 @@ DECL_TEMPLATE(netbsd, sys_sigaction_sigtramp);
 DECL_TEMPLATE(netbsd, sys_fstatvfs1);
 DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
+DECL_TEMPLATE(netbsd, sys_timer_create); // 235
 
 /* implementation */
 PRE(sys_syscall)
@@ -1038,6 +1040,27 @@ POST(sys_sysctl)
    }
 }
 
+// SYS_timer_create 235
+// int timer_create(clockid_t clockid, struct sigevent * restrict evp,
+//                  timer_t * restrict timerid);
+PRE(sys_timer_create)
+{
+   PRINT("sys_timer_create( %" FMT_REGWORD "d, %#" FMT_REGWORD "x, %#" FMT_REGWORD "x )", SARG1,ARG2,ARG3);
+   PRE_REG_READ3(int, "timer_create",
+                 vki_clockid_t, clockid, struct sigevent *, evp,
+                 vki_timer_t *, timerid);
+   if (ARG2 != 0) {
+      PRE_MEM_READ( "timer_create(evp)", ARG2, sizeof(struct vki_sigevent) );
+   }
+   PRE_MEM_WRITE( "timer_create(timerid)", ARG3, sizeof(vki_timer_t) );
+}
+
+POST(sys_timer_create)
+{
+   POST_MEM_WRITE( ARG3, sizeof(vki_timer_t) );
+}
+
+
 PRE(sys__ksem_init)
 {
    /* int _ksem_init(int value, intptr_t *idp); */
@@ -1248,6 +1271,22 @@ PRE(sys_lwp_self)
    /* lwpid_t _lwp_self(void); */
    PRINT("sys_lwp_self ( )");
    PRE_REG_READ0(vki_lwpid_t, "_lwp_self");
+}
+
+
+// int _lwp_wait(lwpid_t wlwp, lwpid_t *rlwp);
+PRE(sys_lwp_wait)
+{
+   *flags |= SfMayBlock;
+   PRINT("sys_lwp_wait ( %ld, %#lx )", SARG1, ARG2);
+   PRE_REG_READ2(long, "_lwp_wait", vki_lwpid_t, lwpid, vki_lwpid_t *, rlwp);
+   if (ARG2)
+      PRE_MEM_WRITE("_lwp_wait(rlwp)", ARG2, sizeof(vki_lwpid_t));
+}
+
+POST(sys_lwp_wait)
+{
+   POST_MEM_WRITE(ARG2, sizeof(vki_lwpid_t));
 }
 
 PRE(sys_lwp_wakeup)
@@ -1558,6 +1597,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_getsockname,          sys_getsockname),           /*  32 */
    GENX_(__NR_access,               sys_access),                /*  33 */
    GENX_(__NR_kill,                 sys_kill),                  /*  37 */
+   GENXY(__NR_dup,                  sys_dup),                   /*  41 */
    NBDXY(__NR_pipe,                 sys_pipe),                  /*  42 */
    GENX_(__NR_getegid,              sys_getegid),               /*  43 */
    GENX_(__NR_getgid,               sys_getgid),                /*  47 */
@@ -1591,6 +1631,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_poll,                 sys_poll),                  /* 209 */
    GENX_(__NR_semget,               sys_semget),                /* 221 */
    GENX_(__NR_semop,                sys_semop),                 /* 222 */
+   NBDXY(__NR_timer_create,         sys_timer_create),          /* 235 */
    NBDXY(__NR__ksem_init,           sys__ksem_init),            /* 247 */
    NBDX_(__NR__ksem_post,           sys__ksem_post),            /* 251 */
    NBDX_(__NR__ksem_wait,           sys__ksem_wait),            /* 252 */
@@ -1616,6 +1657,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR_lwp_create,           sys_lwp_create),            /* 309 */
    NBDX_(__NR_lwp_exit,             sys_lwp_exit),              /* 310 */
    NBDX_(__NR_lwp_self,             sys_lwp_self),              /* 311 */
+   NBDXY(__NR_lwp_wait,             sys_lwp_wait),              /* 312 */
    NBDX_(__NR_lwp_wakeup,           sys_lwp_wakeup),            /* 315 */
    NBDX_(__NR_lwp_getprivate,       sys_lwp_getprivate),        /* 316 */
    NBDX_(__NR_lwp_setprivate,       sys_lwp_setprivate),        /* 317 */

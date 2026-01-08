@@ -2333,7 +2333,7 @@ extern int * __error(void) __attribute__((weak));
     }
 #endif
 
- #if defined(VGO_linux)
+ #if defined(VGO_linux) || defined(VGO_netbsd)
   ALIGNED_ALLOC(VG_Z_LIBC_SONAME, aligned_alloc);
   ALIGNED_ALLOC(SO_SYN_MALLOC,    aligned_alloc);
 

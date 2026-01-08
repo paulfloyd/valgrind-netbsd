@@ -45,7 +45,7 @@
 #define __NR_break              SYS_break
 #define __NR_chdir              SYS_chdir
 #define __NR_chmod              SYS_chmod
-#define __NR_clock_gettime      SYS___clock_gettime50
+#define __NR_clock_gettime      SYS___clock_gettime50 // 232
 #define __NR_close              SYS_close
 #define __NR_connect            SYS_connect
 #define __NR_dup                SYS_dup
@@ -87,9 +87,10 @@
 #define __NR__ksem_wait         SYS__ksem_wait
 #define __NR_listen             SYS_listen
 #define __NR_lseek              SYS_lseek
-#define __NR_lwp_create         SYS__lwp_create
+#define __NR_lwp_create         SYS__lwp_create          // 309
 #define __NR_lwp_ctl            SYS__lwp_ctl
-#define __NR_lwp_exit           SYS__lwp_exit
+#define __NR_lwp_exit           SYS__lwp_exit            // 310
+#define __NR_lwp_wait           SYS__lwp_wait            // 312
 #define __NR_lwp_getprivate     SYS__lwp_getprivate
 #define __NR_lwp_kill           SYS__lwp_kill
 #define __NR_lwp_park           SYS____lwp_park60
@@ -140,7 +141,7 @@
 #define __NR_semop              SYS_semop
 #define __NR_sendmsg            SYS_sendmsg
 #define __NR_sendto             SYS_sendto
-#define __NR_setcontext         SYS_setcontext
+#define __NR_setcontext         SYS_setcontext            // 308
 #define __NR_setitimer          SYS___setitimer50
 #define __NR_setrlimit          SYS_setrlimit
 #define __NR_setsockopt         SYS_setsockopt
@@ -156,10 +157,13 @@
 #define __NR_syscall            SYS_syscall
 #define __NR___syscall          SYS___syscall
 #define __NR_sysctl             SYS___sysctl
+#define __NR_timer_create       SYS_timer_create          // 235
 #define __NR_unlink             SYS_unlink
 #define __NR_vfork              SYS___vfork14
 #define __NR_wait4              SYS___wait450
 #define __NR_write              SYS_write
 #define __NR_writev             SYS_writev
+
+#define __NR____timer_settime50 SYS___timer_settime50    // 446
 
 #endif

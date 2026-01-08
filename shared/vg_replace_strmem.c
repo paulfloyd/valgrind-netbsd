@@ -2549,7 +2549,7 @@ static inline void my_exit ( int x )
       return NULL; \
  }
 
-#if defined(VGO_linux) || defined(VGO_freebsd) || defined(VGO_solaris)
+#if defined(VGO_linux) || defined(VGO_freebsd) || defined(VGO_solaris) | defined(VGO_netbsd)
  MEMCCPY(VG_Z_LIBC_SONAME, memccpy)
 #elif defined(VGO_darwin)
  MEMCCPY(VG_Z_LIBSYSTEM_C_SONAME, __memccpy_chk)
