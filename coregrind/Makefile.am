@@ -628,6 +628,30 @@ libgcc_sup_@VGCONF_ARCH_SEC@_@VGCONF_OS@_a_CFLAGS = \
 endif
 
 #----------------------------------------------------------------------------
+# libcoregrind-sysident-<platform>.a
+# Used for NetBSD support
+#----------------------------------------------------------------------------
+
+pkglib_LIBRARIES += libcoregrind-sysident-@VGCONF_ARCH_PRI@-@VGCONF_OS@.a
+if VGCONF_HAVE_PLATFORM_SEC
+pkglib_LIBRARIES += libcoregrind-sysident-@VGCONF_ARCH_SEC@-@VGCONF_OS@.a
+endif
+
+libcoregrind_sysident_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = m_sysident.S
+libcoregrind_sysident_@VGCONF_ARCH_SEC@_@VGCONF_OS@_a_SOURCES = m_sysident.S
+
+libcoregrind_sysident_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_CPPFLAGS = \
+    $(AM_CPPFLAGS_@VGCONF_PLATFORM_PRI_CAPS@)
+libcoregrind_sysident_@VGCONF_ARCH_SEC@_@VGCONF_OS@_a_CPPFLAGS = \
+    $(AM_CPPFLAGS_@VGCONF_PLATFORM_SEC_CAPS@)
+
+libcoregrind_sysident_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_CCASFLAGS = \
+    $(AM_CCASFLAGS_@VGCONF_PLATFORM_PRI_CAPS@)
+libcoregrind_sysident_@VGCONF_ARCH_SEC@_@VGCONF_OS@_a_CCASFLAGS = \
+    $(AM_CCASFLAGS_@VGCONF_PLATFORM_SEC_CAPS@)
+
+
+#----------------------------------------------------------------------------
 # libreplacemalloc_toolpreload-<platform>.a
 #----------------------------------------------------------------------------
 
