@@ -61,6 +61,7 @@
 /auxprogs/getoff-amd64-solaris
 /auxprogs/getoff-x86-solaris
 /auxprogs/getoff-*-freebsd
+/auxprogs/getoff-*-netbsd
 /auxprogs/libmpiwrap-PPC32_LINUX.so
 /auxprogs/libmpiwrap-PPC64_LINUX.so
 /auxprogs/libmpiwrap-x86-darwin.so
@@ -85,6 +86,7 @@
 /cachegrind/cachegrind-*-linux
 /cachegrind/cachegrind-*-solaris
 /cachegrind/cachegrind-*-freebsd
+/cachegrind/cachegrind-*-netbsd
 /cachegrind/cg_annotate
 /cachegrind/cg_diff
 /cachegrind/cg_merge
@@ -136,6 +138,7 @@
 /callgrind/callgrind-*-linux
 /callgrind/callgrind-*-solaris
 /callgrind/callgrind-*-freebsd
+/callgrind/callgrind-*-netbsd
 /callgrind/callgrind_annotate
 /callgrind/callgrind_control
 /callgrind/Makefile
@@ -172,6 +175,7 @@
 /coregrind/link_tool_exe_linux
 /coregrind/link_tool_exe_solaris
 /coregrind/link_tool_exe_freebsd
+/coregrind/link_tool_exe_netbsd
 /coregrind/Makefile
 /coregrind/Makefile.in
 /coregrind/no_op_client_for_valgrind
@@ -288,12 +292,14 @@
 /dhat/dhat-*-linux
 /dhat/dhat-*-solaris
 /dhat/dhat-*-freebsd
+/dhat/dhat-*-netbsd
 /dhat/Makefile
 /dhat/Makefile.in
 /dhat/vgpreload_dhat-*-linux.so
 /dhat/vgpreload_dhat-*-darwin.so
 /dhat/vgpreload_dhat-*-solaris.so
 /dhat/vgpreload_dhat-*-freebsd.so
+/dhat/vgpreload_dhat-*-netbsd.so
 
 # /dhat/tests/
 /dhat/tests/Makefile
@@ -356,6 +362,7 @@
 /drd/drd-*-linux
 /drd/drd-*-solaris
 /drd/drd-*-freebsd
+/drd/drd-*-netbsd
 /drd/Makefile
 /drd/Makefile.in
 /drd/splash2
@@ -363,6 +370,7 @@
 /drd/vgpreload_drd-*-darwin.so
 /drd/vgpreload_drd-*-solaris.so
 /drd/vgpreload_drd-*-freebsd.so
+/drd/vgpreload_drd-*-netbsd.so
 
 # /drd/docs/
 /drd/docs/.deps
@@ -655,12 +663,14 @@
 /helgrind/helgrind-*-linux
 /helgrind/helgrind-*-solaris
 /helgrind/helgrind-*-freebsd
+/helgrind/helgrind-*-netbsd
 /helgrind/Makefile
 /helgrind/Makefile.in
 /helgrind/vgpreload_helgrind-*-linux.so
 /helgrind/vgpreload_helgrind-*-darwin.so
 /helgrind/vgpreload_helgrind-*-solaris.so
 /helgrind/vgpreload_helgrind-*-freebsd.so
+/helgrind/vgpreload_helgrind-*-netbsd.so
 
 # /helgrind/docs/
 /helgrind/docs/Makefile
@@ -754,6 +764,7 @@
 /lackey/lackey-*-linux
 /lackey/lackey-*-solaris
 /lackey/lackey-*-freebsd
+/lackey/lackey-*-netbsd
 /lackey/Makefile
 /lackey/Makefile.in
 
@@ -779,6 +790,7 @@
 /massif/massif-*-linux
 /massif/massif-*-solaris
 /massif/massif-*-freebsd
+/massif/massif-*-netbsd
 /massif/ms_print
 
 # /massif/docs/
@@ -839,6 +851,7 @@
 /memcheck/memcheck-*-linux
 /memcheck/memcheck-*-solaris
 /memcheck/memcheck-*-freebsd
+/memcheck/memcheck-*-netbsd
 
 # /memcheck/docs/
 /memcheck/docs/Makefile.in
@@ -1552,6 +1565,7 @@
 /none/none-*-linux
 /none/none-*-solaris
 /none/none-*-freebsd
+/none/none-*-netbsd
 
 # /none/docs/
 /none/docs/Makefile.in
