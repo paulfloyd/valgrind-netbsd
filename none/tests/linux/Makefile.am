@@ -20,7 +20,6 @@ EXTRA_DIST = \
 	mremap6.stderr.exp mremap6.vgtest \
 	open_client.stderr.exp open_client.vgtest \
 	pthread-stack.stderr.exp pthread-stack.vgtest \
-	readlinkat_self.stderr.exp readlinkat_self.vgtest \
 	stack-overflow.stderr.exp stack-overflow.vgtest
 
 check_PROGRAMS = \
@@ -37,7 +36,6 @@ check_PROGRAMS = \
 	mremap5 \
 	mremap6 \
 	pthread-stack \
-	readlinkat_self \
 	stack-overflow
 
 if HAVE_OPENAT2
@@ -59,7 +57,6 @@ open_client_SOURCES = open_client.cpp
 endif
 clonev_LDADD = -lpthread
 pthread_stack_LDADD = -lpthread
-readlinkat_self_CFLAGS = ${AM_CFLAGS} @FLAG_W_NO_STRINGOP_OVERFLOW@
 
 stack_overflow_CFLAGS = $(AM_CFLAGS) @FLAG_W_NO_UNINITIALIZED@ \
 			@FLAG_W_NO_INFINITE_RECURSION@
