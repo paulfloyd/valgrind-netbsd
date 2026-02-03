@@ -34,6 +34,10 @@
 
 #include "../../config.h"
 
+#if !defined(ELF_NOTE_GNU)
+#define ELF_NOTE_GNU "GNU"
+#endif
+
 /* Make all NetBSD features available. See <sys/featuretest.h> */
 #define _NETBSD_SOURCE 1
 
