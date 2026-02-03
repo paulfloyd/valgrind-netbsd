@@ -1597,6 +1597,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_getsockname,          sys_getsockname),           /*  32 */
    GENX_(__NR_access,               sys_access),                /*  33 */
    GENX_(__NR_kill,                 sys_kill),                  /*  37 */
+   GENX_(__NR_getppid,              sys_getppid),               /*  39 */
    GENXY(__NR_dup,                  sys_dup),                   /*  41 */
    NBDXY(__NR_pipe,                 sys_pipe),                  /*  42 */
    GENX_(__NR_getegid,              sys_getegid),               /*  43 */

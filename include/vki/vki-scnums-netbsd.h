@@ -82,6 +82,7 @@
 #define __NR_ioctl              SYS_ioctl
 #define __NR_issetugid          SYS_issetugid
 #define __NR_kill               SYS_kill
+#define __NR_getppid            SYS_getppid              // 39
 #define __NR__ksem_init         SYS__ksem_init
 #define __NR__ksem_post         SYS__ksem_post
 #define __NR__ksem_wait         SYS__ksem_wait
