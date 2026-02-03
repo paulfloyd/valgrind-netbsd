@@ -95,7 +95,7 @@ static void load_client ( /*MOD*/ExeInfo* info,
       VG_(cl_exec_fd) = sr_Res(res);
 
    /* Set initial brk values. */
-   VG_(brk_base) = VG_(brk_limit) = info->brkbase;
+   VG_(brk_base) = VG_(brk_limit) = VG_PGROUNDUP(info->brkbase);
 }
 
 /*====================================================================*/
@@ -670,52 +670,61 @@ Addr setup_client_stack( void*  init_sp,
    loaded data segment. The break syscall wrapper handles this special case. */
 
 /* Establishes initial data segment for brk (heap). */
-static Bool setup_client_dataseg(void)
+static void setup_client_dataseg( SizeT max_size )
 {
-   /* Segment size is initially at least 1 MB and at most 8 MB. */
-   SizeT m1 = 1024 * 1024;
-   SizeT m8 = 8 * m1;
-   SizeT initial_size = VG_(client_rlimit_data).rlim_cur;
-   VG_(debugLog)(1, "initimg", "Setup client data (brk) segment "
-                               "at %#lx\n", VG_(brk_base));
-   if (initial_size < m1)
-      initial_size = m1;
-   if (initial_size > m8)
-      initial_size = m8;
-   initial_size = VG_PGROUNDUP(initial_size);
-
-   Addr anon_start = VG_PGROUNDUP(VG_(brk_base));
-   SizeT anon_size = VG_PGROUNDUP(initial_size);
-   Addr resvn_start = anon_start + anon_size;
-   SizeT resvn_size = VKI_PAGE_SIZE;
+   Bool   ok;
+   SysRes sres;
+   Addr   anon_start  = VG_(brk_base);
+   SizeT  anon_size   = VKI_PAGE_SIZE;
+   Addr   resvn_start = anon_start + anon_size;
+   SizeT  resvn_size  = max_size - anon_size;
 
    vg_assert(VG_IS_PAGE_ALIGNED(anon_size));
    vg_assert(VG_IS_PAGE_ALIGNED(resvn_size));
    vg_assert(VG_IS_PAGE_ALIGNED(anon_start));
    vg_assert(VG_IS_PAGE_ALIGNED(resvn_start));
+
+   /* Because there's been no brk activity yet: */
    vg_assert(VG_(brk_base) == VG_(brk_limit));
 
-   /* Find the loaded data segment and remember its protection. */
-   const NSegment *seg = VG_(am_find_nsegment)(VG_(brk_base) - 1);
-   vg_assert(seg != NULL);
-   UInt prot = (seg->hasR ? VKI_PROT_READ : 0)
-             | (seg->hasW ? VKI_PROT_WRITE : 0)
-             | (seg->hasX ? VKI_PROT_EXEC : 0);
-
-   /* Try to create the data segment and associated reservation where
+   /* Try to create the data seg and associated reservation where
       VG_(brk_base) says. */
-   Bool ok = VG_(am_create_reservation)(resvn_start, resvn_size, SmLower,
-                                        anon_size);
-   if (!ok) {
-      /* That didn't work, we're hosed. */
-      return False;
-   }
+   ok = VG_(am_create_reservation)(
+           resvn_start,
+           resvn_size,
+           SmLower,
+           anon_size
+        );
 
-   /* Map the data segment. */
-   SysRes sres = VG_(am_mmap_anon_fixed_client)(anon_start, anon_size, prot);
+   if (!ok) {
+      /* Hmm, that didn't work.  Well, let aspacem suggest an address
+         it likes better, and try again with that. */
+      anon_start = VG_(am_get_advisory_client_simple)
+                   ( 0/*floating*/, anon_size+resvn_size, &ok );
+      if (ok) {
+         resvn_start = anon_start + anon_size;
+         ok = VG_(am_create_reservation)(
+                 resvn_start,
+                 resvn_size,
+                 SmLower,
+                 anon_size
+              );
+         if (ok) {
+            VG_(brk_base) = VG_(brk_limit) = anon_start;
+         }
+      }
+      /* that too might have failed, but if it has, we're hosed: there
+         is no Plan C. */
+   }
+   vg_assert(ok);
+
+   sres = VG_(am_mmap_anon_fixed_client)(
+             anon_start,
+             anon_size,
+             VKI_PROT_READ|VKI_PROT_WRITE|VKI_PROT_EXEC
+          );
    vg_assert(!sr_isError(sres));
    vg_assert(sr_Res(sres) == anon_start);
-   return True;
 }
 
 /*====================================================================*/
@@ -810,10 +819,19 @@ IIFinaliseImageInfo VG_(ii_create_image)(IICreateImageInfo iicii,
    //     p: load_client()     [for 'info' and hence VG_(brk_base)]
    //--------------------------------------------------------------
    {
-      if (!setup_client_dataseg()) {
-         VG_(printf)("valgrind: cannot initialize data segment (brk).\n");
-         VG_(exit)(1);
+      SizeT m1 = 1024 * 1024;
+      SizeT m8 = 8 * m1;
+      SizeT dseg_max_size = (SizeT)VG_(client_rlimit_data).rlim_cur;
+      VG_(debugLog)(1, "initimg", "Setup client data (brk) segment\n");
+      if (dseg_max_size < m1) {
+         dseg_max_size = m1;
       }
+      if (dseg_max_size > m8) {
+         dseg_max_size = m8;
+      }
+      dseg_max_size = VG_PGROUNDUP(dseg_max_size);
+
+      setup_client_dataseg( dseg_max_size );
    }
 
    VG_(free)(info.interp_name); info.interp_name = NULL;
