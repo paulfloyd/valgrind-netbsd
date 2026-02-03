@@ -38,6 +38,7 @@
 #include "pub_core_libcfile.h"
 #include "pub_core_libcprint.h"
 #include "pub_core_libcproc.h"
+#include "pub_core_libcsignal.h"
 #include "pub_core_machine.h"
 #include "pub_core_mallocfree.h"
 #include "pub_core_options.h"
@@ -311,6 +312,48 @@ void VG_(main_thread_wrapper_NORETURN)(ThreadId tid)
    vg_assert(0);
 }
 
+/* Do a fork() */
+static SysRes ML_(do_fork) ( ThreadId tid )
+{
+   vki_sigset_t fork_saved_mask;
+   vki_sigset_t mask;
+   SysRes       res;
+
+   /* Block all signals during fork, so that we can fix things up in
+      the child without being interrupted. */
+   VG_(sigfillset)(&mask);
+   VG_(sigprocmask)(VKI_SIG_SETMASK, &mask, &fork_saved_mask);
+
+   VG_(do_atfork_pre)(tid);
+
+   res = VG_(do_syscall0)( __NR_fork );
+
+   if (!sr_isError(res)) {
+      if (sr_Res(res) == 0) {
+         /* child */
+         VG_(do_atfork_child)(tid);
+
+         /* restore signal mask */
+         VG_(sigprocmask)(VKI_SIG_SETMASK, &fork_saved_mask, NULL);
+
+      } else {
+         /* parent */
+         VG_(do_atfork_parent)(tid);
+
+         if (VG_(clo_trace_syscalls)) {
+            VG_(printf)("   clone(fork): process %d created child %lu\n",
+                        VG_(getpid)(), sr_Res(res));
+         }
+
+         /* restore signal mask */
+         VG_(sigprocmask)(VKI_SIG_SETMASK, &fork_saved_mask, NULL);
+      }
+   }
+
+   return res;
+}
+
+
 /* Save a complete context (VCPU state, sigmask) of a given client thread
    into the vki_ucontext_t structure.  This structure is supposed to be
    allocated in the client memory, a caller must make sure that the memory can
@@ -455,6 +498,7 @@ DECL_TEMPLATE(netbsd, sys_lwp_wakeup);
 DECL_TEMPLATE(netbsd, sys_lwp_getprivate);
 DECL_TEMPLATE(netbsd, sys_lwp_setprivate);
 DECL_TEMPLATE(netbsd, sys_lwp_kill);
+DECL_TEMPLATE(netbsd, sys_lwp_detach);
 DECL_TEMPLATE(netbsd, sys_lwp_unpark);
 DECL_TEMPLATE(netbsd, sys_lwp_unpark_all);
 DECL_TEMPLATE(netbsd, sys_lwp_setname);
@@ -465,6 +509,7 @@ DECL_TEMPLATE(netbsd, sys_fstatvfs1);
 DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
+DECL_TEMPLATE(netbsd, sys_vfork); // 282
 
 /* implementation */
 PRE(sys_syscall)
@@ -1098,6 +1143,22 @@ PRE(sys_minherit)
                  void *, addr, vki_size_t, len, int, inherit);
 }
 
+// SYS_vfork 66
+// pid_t vfork(void);
+PRE(sys_vfork)
+{  
+   PRINT("%s", "sys_vfork ()");
+   PRE_REG_READ0(pid_t, "vfork");
+
+   /* Pretend vfork == fork. Not true, but will have to do. */
+   SET_STATUS_from_SysRes( ML_(do_fork)(tid) );
+   if (SUCCESS) {
+      /* Thread creation was successful; let the child have the chance
+         to run */
+      *flags |= SfYieldAfter;
+   }
+}
+
 PRE(sys_issetugid)
 {
    /* int issetugid(void); */
@@ -1358,6 +1419,14 @@ PRE(sys_lwp_kill)
    /* This kill might have given us a pending signal.  Ask for a check once
     * the syscall is done. */
    *flags |= SfPollAfter;
+}
+
+// SYS__lwp_detach 319
+// int  _lwp_detach(lwpid_t);
+PRE(sys_lwp_detach)
+{
+   PRINT("sys_lwp_detach ( %ld )", SARG1);
+   PRE_REG_READ1(long, "_lwp_detach", vki_lwpid_t, target);
 }
 
 PRE(sys_lwp_unpark)
@@ -1646,9 +1715,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_mq_receive,           sys_mq_receive),            /* 264 */
    NBDX_(__NR_minherit,             sys_minherit),              /* 273 */
    GENXY(__NR_sigaltstack,          sys_sigaltstack),           /* 281 */
-#if 0
-   GENX_(__NR_vfork,                sys_vfork),                 /* 282 */
-#endif
+   NBDX_(__NR_vfork,                sys_vfork),                 /* 282 */
    GENXY(__NR_sigprocmask,          sys_sigprocmask),           /* 293 */
    GENX_(__NR_sigsuspend,           sys_sigsuspend),            /* 294 */
    GENXY(__NR_getcwd,               sys_getcwd),                /* 296 */
@@ -1663,6 +1730,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR_lwp_getprivate,       sys_lwp_getprivate),        /* 316 */
    NBDX_(__NR_lwp_setprivate,       sys_lwp_setprivate),        /* 317 */
    NBDX_(__NR_lwp_kill,             sys_lwp_kill),              /* 318 */
+   NBDX_(__NR_lwp_detach,           sys_lwp_detach),            /* 319 */
    NBDX_(__NR_lwp_unpark,           sys_lwp_unpark),            /* 321 */
    NBDX_(__NR_lwp_unpark_all,       sys_lwp_unpark_all),        /* 322 */
    NBDXY(__NR_lwp_setname,          sys_lwp_setname),           /* 323 */

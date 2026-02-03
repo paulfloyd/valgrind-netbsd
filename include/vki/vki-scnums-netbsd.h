@@ -90,6 +90,7 @@
 #define __NR_lseek              SYS_lseek
 #define __NR_lwp_create         SYS__lwp_create          // 309
 #define __NR_lwp_ctl            SYS__lwp_ctl
+#define __NR_lwp_detach         SYS__lwp_detach          // 319
 #define __NR_lwp_exit           SYS__lwp_exit            // 310
 #define __NR_lwp_wait           SYS__lwp_wait            // 312
 #define __NR_lwp_getprivate     SYS__lwp_getprivate
@@ -160,7 +161,7 @@
 #define __NR_sysctl             SYS___sysctl
 #define __NR_timer_create       SYS_timer_create          // 235
 #define __NR_unlink             SYS_unlink
-#define __NR_vfork              SYS___vfork14
+#define __NR_vfork              SYS___vfork14             // 282
 #define __NR_wait4              SYS___wait450
 #define __NR_write              SYS_write
 #define __NR_writev             SYS_writev
