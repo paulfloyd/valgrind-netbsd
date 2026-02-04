@@ -5111,9 +5111,9 @@ PRE(sys_shm_open)
    PRE_REG_READ3(int, "shm_open",
                  const char *, path, int, flags, vki_mode_t, mode);
    if (ARG1 == VKI_SHM_ANON) {
-      PRINT("sys_shm_open(%#" FMT_REGWORD "x(SHM_ANON), %" FMT_REGWORD "u, %hu)", ARG1, ARG2, (vki_mode_t)ARG3);
+      PRINT("sys_shm_open(%#" FMT_REGWORD "x(SHM_ANON), %" FMT_REGWORD "d, %hu)", ARG1, SARG2, (vki_mode_t)ARG3);
    } else {
-      PRINT("sys_shm_open(%#" FMT_REGWORD "x(%s), %" FMT_REGWORD "u, %hu)", ARG1, (HChar *)ARG1, ARG2, (vki_mode_t)ARG3);
+      PRINT("sys_shm_open(%#" FMT_REGWORD "x(%s), %" FMT_REGWORD "d, %hu)", ARG1, (HChar *)ARG1, SARG2, (vki_mode_t)ARG3);
       PRE_MEM_RASCIIZ( "shm_open(path)", ARG1 );
    }
    *flags |= SfMayBlock;
@@ -5176,9 +5176,10 @@ POST(sys_cpuset)
 // int faccessat(int fd, const char *path, int mode, int flag);
 PRE(sys_faccessat)
 {
-   PRINT("sys_faccessat ( %" FMT_REGWORD "u, %#" FMT_REGWORD "x(%s), %" FMT_REGWORD "u )", ARG1,ARG2,(char*)ARG2,ARG3);
-   PRE_REG_READ3(int, "faccessat",
-                 int, fd, const char *, path, int, flag);
+   PRINT("sys_faccessat ( %" FMT_REGWORD "u, %#" FMT_REGWORD "x(%s), %" FMT_REGWORD "d, %" FMT_REGWORD "d )",
+         ARG1, ARG2,(char*)ARG2, SARG3, SARG4);
+   PRE_REG_READ4(int, "faccessat",
+                 int, fd, const char *, path, int, mode, int, flag);
    ML_(fd_at_check_allowed)(SARG1, (const HChar*)ARG2, "faccessat", tid, status);
    PRE_MEM_RASCIIZ( "faccessat(path)", ARG2 );
 }
@@ -6281,7 +6282,8 @@ PRE(sys_utimensat)
                  int, flag);
    ML_(fd_at_check_allowed)(SARG1, (const HChar*)ARG2, "utimensat", tid, status);
    PRE_MEM_RASCIIZ("utimensat(path)", ARG2);
-   PRE_MEM_READ("utimensat(times)", ARG3, 2*sizeof(struct vki_timespec));
+   if (ARG3)
+      PRE_MEM_READ("utimensat(times)", ARG3, 2*sizeof(struct vki_timespec));
 }
 
 // SYS_fdatasync  550
@@ -6852,16 +6854,10 @@ PRE(sys_aio_writev)
          // by the members of the iocb->aio_iov array
          // FreeBSD headers #define define this to aio_iovcnt
          SizeT vec_count = (SizeT)iocb->aio_nbytes;
-#if defined(__clang__)
-#pragma clang diagnostic push
-         // yes, I know it is volatile
-#pragma clang diagnostic ignored "-Wcast-qual"
-#endif
-         struct vki_iovec* p_iovec  = (struct vki_iovec*)iocb->aio_buf;
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-         PRE_MEM_READ("aio_writev(iocb->aio_iov)", (Addr)p_iovec, vec_count*sizeof(struct vki_iovec));
+         uintptr_t uint_aio_buf  = (uintptr_t)iocb->aio_buf;
+         struct vki_iovec* p_iovec = (struct vki_iovec*)uint_aio_buf;
+
+         PRE_MEM_READ("aio_writev(iocb->aio_iov)", uint_aio_buf, vec_count*sizeof(struct vki_iovec));
          // and this to aio_iov
 
          if (ML_(safe_to_deref)(p_iovec, vec_count*sizeof(struct vki_iovec))) {

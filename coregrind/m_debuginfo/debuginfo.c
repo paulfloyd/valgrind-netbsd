@@ -1190,6 +1190,13 @@ ULong VG_(di_notify_mmap)( Addr a, Bool allow_SkFileV, Int use_fd )
       return 0;
 
    /* If the file doesn't have a name, we're hosed.  Give up. */
+  /*
+    * Maybe not.  Since bug 280965 we may have the fd, and if we
+    * do have the fd we use that rather than the filename to
+    * get ELF info. The filename is used in several places but I think
+    * that it is not obligatory and when we have just the fd we could
+   * get by.
+    */
    filename = VG_(am_get_filename)( seg );
    if (!filename)
       return 0;
@@ -1199,8 +1206,11 @@ ULong VG_(di_notify_mmap)( Addr a, Bool allow_SkFileV, Int use_fd )
     * --20208-- WARNING: Serious error when reading debug info
     * --20208-- When reading debug info from /proc/xen/privcmd:
     * --20208-- can't read file to inspect ELF header
+    *
+    * Also PCI devices, see bug 514206
     */
-   if (VG_(strncmp)(filename, "/proc/xen/", 10) == 0)
+   if (VG_(strncmp)(filename, "/proc/xen/", 10) == 0 ||
+       VG_(strncmp)(filename, "/sys/devices/pci", 16) == 0)
       return 0;
 
    if (debug)

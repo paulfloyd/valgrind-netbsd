@@ -292,6 +292,13 @@ static IRExpr* mkU ( IRType ty, ULong i )
    }
 }
 
+static IRExpr* mkV128 ( UShort mask )
+{
+   return IRExpr_Const(IRConst_V128(mask));
+}
+
+#include "guest_generic_sse.h"
+
 static void storeLE ( IRExpr* addr, IRExpr* data )
 {
    stmt( IRStmt_Store(Iend_LE, addr, data) );
@@ -1666,11 +1673,6 @@ static void putYMMRegLane32 ( UInt ymmreg, Int laneno, IRExpr* e )
 {
    vassert(typeOfIRExpr(irsb->tyenv,e) == Ity_I32);
    stmt( IRStmt_Put( ymmGuestRegLane32offset(ymmreg,laneno), e ) );
-}
-
-static IRExpr* mkV128 ( UShort mask )
-{
-   return IRExpr_Const(IRConst_V128(mask));
 }
 
 /* Write the low half of a YMM reg and zero out the upper half. */
@@ -5965,6 +5967,10 @@ ULong dis_FPU ( /*OUT*/Bool* decode_ok,
                assign(t2, get_ST(r_src));
                put_ST_UNCHECKED(0, mkexpr(t2));
                put_ST_UNCHECKED(r_src, mkexpr(t1));
+               break;
+
+            case 0xD0: /* FNOP */
+               DIP("fnop\n");
                break;
 
             case 0xE0: /* FCHS */
@@ -11226,30 +11232,6 @@ static IRTemp math_SHUFPD_256 ( IRTemp sV, IRTemp dV, UInt imm8 )
    IRTemp rV   = newTemp(Ity_V256);
    assign(rV, binop(Iop_V128HLtoV256, mkexpr(rVhi), mkexpr(rVlo)));
    return rV;
-}
-
-
-static IRTemp math_BLENDPD_128 ( IRTemp sV, IRTemp dV, UInt imm8 )
-{
-   UShort imm8_mask_16;
-   IRTemp imm8_mask = newTemp(Ity_V128);
-
-   switch( imm8 & 3 ) {
-      case 0:  imm8_mask_16 = 0x0000; break;
-      case 1:  imm8_mask_16 = 0x00FF; break;
-      case 2:  imm8_mask_16 = 0xFF00; break;
-      case 3:  imm8_mask_16 = 0xFFFF; break;
-      default: vassert(0);            break;
-   }
-   assign( imm8_mask, mkV128( imm8_mask_16 ) );
-
-   IRTemp res = newTemp(Ity_V128);
-   assign ( res, binop( Iop_OrV128, 
-                        binop( Iop_AndV128, mkexpr(sV),
-                                            mkexpr(imm8_mask) ), 
-                        binop( Iop_AndV128, mkexpr(dV), 
-                               unop( Iop_NotV128, mkexpr(imm8_mask) ) ) ) );
-   return res;
 }
 
 
@@ -20786,8 +20768,8 @@ Long dis_ESC_NONE (
          dis_REP_op ( dres, AMD64CondAlways, dis_MOVS, sz,
                       guest_RIP_curr_instr,
                       guest_RIP_bbstart+delta, "rep movs", pfx );
-        dres->whatNext = Dis_StopHere;
-        return delta;
+         vassert(dres->whatNext == Dis_StopHere);
+         return delta;
       }
       /* A4: movsb */
       if (!haveF3(pfx) && !haveF2(pfx)) {
@@ -20800,14 +20782,31 @@ Long dis_ESC_NONE (
 
    case 0xA6:
    case 0xA7:
-      /* F3 A6/A7: repe cmps/rep cmps{w,l,q} */
-      if (haveF3(pfx) && !haveF2(pfx)) {
+      /* F2 A6/A7: repne cmpsb/repne cmps{w,l,q} */
+      if (haveF2(pfx) && !haveF3(pfx)) {
+         if (opc == 0xA6)
+            sz = 1;
+         dis_REP_op ( dres, AMD64CondNZ, dis_CMPS, sz, 
+                      guest_RIP_curr_instr,
+                      guest_RIP_bbstart+delta, "repne cmps", pfx );
+         vassert(dres->whatNext == Dis_StopHere);
+         return delta;
+      }
+      /* F3 A6/A7: repe cmpsb/repe cmps{w,l,q} */
+      if (!haveF2(pfx) && haveF3(pfx)) {
          if (opc == 0xA6)
             sz = 1;
          dis_REP_op ( dres, AMD64CondZ, dis_CMPS, sz, 
                       guest_RIP_curr_instr,
                       guest_RIP_bbstart+delta, "repe cmps", pfx );
-         dres->whatNext = Dis_StopHere;
+         vassert(dres->whatNext == Dis_StopHere);
+         return delta;
+      }
+      /* A6/A7: cmpsb/cmps{w,l,q} */
+      if (!haveF2(pfx) && !haveF3(pfx)) {
+         if (opc == 0xA6)
+            sz = 1;
+         dis_string_op ( dis_CMPS, sz, "cmps", pfx );
          return delta;
       }
       goto decode_failure;
