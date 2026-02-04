@@ -20800,7 +20800,7 @@ s390_decode_and_irgen(const UChar *bytes, UInt insn_length, DisResult *dres)
    } else {
       /* Handle normal instructions. */
       if (UNLIKELY(vex_traceflags & VEX_TRACE_FE))
-         s390_disasm(bytes);
+         s390_disasm((const s390_opnd *)bytes);
  
       switch (insn_length) {
       case 2:
