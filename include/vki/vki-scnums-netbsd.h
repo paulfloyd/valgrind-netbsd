@@ -167,5 +167,6 @@
 #define __NR_writev             SYS_writev
 
 #define __NR____timer_settime50 SYS___timer_settime50    // 446
+#define __NR_semtimedop SYS_semtimedop    // 506
 
 #endif

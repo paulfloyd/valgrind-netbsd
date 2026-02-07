@@ -2160,6 +2160,8 @@ Bool ML_(read_elf_object) ( struct _DebugInfo* di )
                       offset_checks = True;
                    }
 #endif
+                  // FIXME PJF - uncomment the next line to get host stacktraces
+                  // offset_checks = True;
                   if (   (map->rx || map->rw || map->ro)
                       && map->size > 0 /* stay sane */
                       && offset_checks) {

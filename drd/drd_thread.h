@@ -50,7 +50,11 @@
  * least as many bits as pthread_t, and INVALID_POSIX_THREADID
  * must be a value that will never be returned by pthread_self().
  */
+#if defined(VGO_netbsd)
+#define INVALID_POSIX_THREADID ((PThreadId)-1)
+#else
 #define INVALID_POSIX_THREADID ((PThreadId)0)
+#endif
 
 
 /* Type definitions. */

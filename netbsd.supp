@@ -55,7 +55,15 @@
 }
 
 {
-   NetBSD-ptghread_once
+   NetBSD-pthread_once
    Helgrind:Race
    fun:pthread_once
 }
+
+{
+   NetBSD-pthread_create
+   drd:ConflictingAccess
+   ...
+   fun:pthread_create
+}
+

@@ -510,6 +510,7 @@ DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
+DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
 /* implementation */
 PRE(sys_syscall)
@@ -1617,6 +1618,17 @@ PRE(sys_lwp_park)
       PRE_MEM_READ("_lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
 }
 
+PRE(sys_semtimedop)
+{
+   *flags |= SfMayBlock;
+   PRINT("sys_semtimedop ( %ld, %#" FMT_REGWORD "x, %" FMT_REGWORD "u, %#"
+         FMT_REGWORD "x )", SARG1, ARG2, ARG3, ARG4);
+   PRE_REG_READ4(long, "semtimedop",
+                 int, semid, struct sembuf *, sops, unsigned, nsops,
+                 struct timespec *, timeout);
+   ML_(generic_PRE_sys_semtimedop)(tid, ARG1,ARG2,ARG3,ARG4);
+}
+
 /* ---------------------------------------------------------------------
  * The NetBSD syscall table
  * ------------------------------------------------------------------ */
@@ -1754,7 +1766,8 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_pselect,              sys_pselect),               /* 436 */
    GENXY(__NR_wait4,                sys_wait4),                 /* 449 */
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
-   NBDX_(__NR_lwp_park,             sys_lwp_park)               /* 478 */
+   NBDX_(__NR_lwp_park,             sys_lwp_park),              /* 478 */
+   NBDX_(__NR_semtimedop,           sys_semtimedop)             /* 506 */
 };
 
 SyscallTableEntry *ML_(get_netbsd_syscall_entry)(UInt sysno)

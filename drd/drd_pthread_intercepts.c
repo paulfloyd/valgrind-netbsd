@@ -62,10 +62,6 @@
 #include <osreldate.h>
 #endif
 
-#if defined(VGO_netbsd)
-#include <dlfcn.h>
-#endif
-
 #if defined(VGO_solaris)
 /*
  * Solaris usually provides pthread_* functions on top of Solaris threading
@@ -307,17 +303,6 @@ static void DRD_(init)(void)
          dlclose(libsys);
       }
 #endif
-   }
-#endif
-
-#if defined(VGO_netbsd)
-   {
-      void* test = dlopen("/usr/lib/libpthread.so.1", RTLD_NOW|RTLD_GLOBAL|RTLD_NODELETE);
-      if (test) {
-         dlclose(test);
-      } else {
-         perror("dlopen failed:");
-      }
    }
 #endif
 
