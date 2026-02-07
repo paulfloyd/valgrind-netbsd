@@ -1830,17 +1830,17 @@ Bool ML_(fd_allowed)(Int fd, const HChar *syscallname, ThreadId tid,
       }
 
       if (VG_(showing_core_warnings) ()) {
-      if (fd == VG_(log_output_sink).fd && VG_(log_output_sink).fd >= 0)
-	 VG_(message)(Vg_UserMsg, 
+         if (fd == VG_(log_output_sink).fd && VG_(log_output_sink).fd >= 0)
+            VG_(message)(Vg_UserMsg, 
             "   Use --log-fd=<number> to select an alternative log fd.\n");
-      if (fd == VG_(xml_output_sink).fd && VG_(xml_output_sink).fd >= 0)
-	 VG_(message)(Vg_UserMsg, 
+         if (fd == VG_(xml_output_sink).fd && VG_(xml_output_sink).fd >= 0)
+            VG_(message)(Vg_UserMsg, 
             "   Use --xml-fd=<number> to select an alternative XML "
             "output fd.\n");
 
          // XXX This is the legacy warning, will be removed eventually
          if (VG_(clo_verbosity) > 1 && !VG_(clo_track_fds)) {
-         VG_(get_and_pp_StackTrace)(tid, VG_(clo_backtrace_size));
+            VG_(get_and_pp_StackTrace)(tid, VG_(clo_backtrace_size));
          }
       }
    }

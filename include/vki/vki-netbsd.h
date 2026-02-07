@@ -234,6 +234,7 @@ typedef clockid_t           vki_clockid_t;
 typedef timer_t             vki_timer_t;
 typedef time_t              vki_time_t;
 #define vki_timespec        timespec
+#define vki_itimerspec      itimerspec
 
 #include <ucontext.h>
 #define VKI_UC_SIGMASK _UC_SIGMASK

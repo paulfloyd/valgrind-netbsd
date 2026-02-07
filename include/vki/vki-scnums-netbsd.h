@@ -161,13 +161,14 @@
 #define __NR___syscall          SYS___syscall
 #define __NR_sysctl             SYS___sysctl
 #define __NR_timer_create       SYS_timer_create          // 235
+#define __NR_timer_delete       SYS_timer_delete          // 236
 #define __NR_unlink             SYS_unlink
 #define __NR_vfork              SYS___vfork14             // 282
 #define __NR_wait4              SYS___wait450
 #define __NR_write              SYS_write
 #define __NR_writev             SYS_writev
 
-#define __NR____timer_settime50 SYS___timer_settime50    // 446
+#define __NR___timer_settime50  SYS___timer_settime50    // 446
 #define __NR_semtimedop SYS_semtimedop    // 506
 
 #endif

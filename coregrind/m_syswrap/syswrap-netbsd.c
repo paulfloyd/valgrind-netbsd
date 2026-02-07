@@ -509,8 +509,10 @@ DECL_TEMPLATE(netbsd, sys_fstatvfs1);
 DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
+DECL_TEMPLATE(netbsd, sys_timer_delete); // 236
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
+DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
 /* implementation */
@@ -1107,6 +1109,14 @@ POST(sys_timer_create)
    POST_MEM_WRITE( ARG3, sizeof(vki_timer_t) );
 }
 
+// SYS_timer_delete 235
+// int timer_delete(clockid_t clockid);
+PRE(sys_timer_delete) 
+{
+   PRINT("sys_timer_delete( %" FMT_REGWORD "d )", SARG1);
+   PRE_REG_READ1(int, "timer_delete",
+                 vki_clockid_t, clockid)
+} 
 
 PRE(sys__ksem_init)
 {
@@ -1610,6 +1620,32 @@ POST(sys_socket)
    SET_STATUS_from_SysRes(r);
 }
 
+// SYS___timer_settime50   446
+// int __timer_settime50(timer_t timerid, int flags,
+//                       const struct itimerspec *restrict value,
+//                       struct itimerspec *restrict ovalue);
+PRE(sys___timer_settime50)
+{
+   PRINT("sys___timer_settime50( %#" FMT_REGWORD "x, %" FMT_REGWORD "d, %#" FMT_REGWORD "x, %#" FMT_REGWORD "x )", ARG1,SARG2,ARG3,ARG4);
+   PRE_REG_READ4(int, "__timer_settime40",
+                 vki_timer_t, timerid, int, flags,
+                 const struct itimerspec *, value,
+                 struct itimerspec *, ovalue);
+   PRE_MEM_READ( "__timer_settime50(value)", ARG3,
+                 sizeof(struct vki_itimerspec) );
+   if (ARG4 != 0) {
+      PRE_MEM_WRITE( "__timer_settime50(ovalue)", ARG4,
+                     sizeof(struct vki_itimerspec) );
+   }
+}
+
+POST(sys___timer_settime50)
+{
+   if (ARG4 != 0) {
+      POST_MEM_WRITE( ARG4, sizeof(struct vki_itimerspec) );
+   }
+}
+
 PRE(sys_lwp_park)
 {
    /* int
@@ -1722,6 +1758,7 @@ static SyscallTableEntry syscall_table[] = {
    GENX_(__NR_semget,               sys_semget),                /* 221 */
    GENX_(__NR_semop,                sys_semop),                 /* 222 */
    NBDXY(__NR_timer_create,         sys_timer_create),          /* 235 */
+   NBDX_(__NR_timer_delete,         sys_timer_delete),          /* 236 */
    NBDXY(__NR__ksem_init,           sys__ksem_init),            /* 247 */
    NBDX_(__NR__ksem_post,           sys__ksem_post),            /* 251 */
    NBDX_(__NR__ksem_wait,           sys__ksem_wait),            /* 252 */
@@ -1773,6 +1810,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_fstat,                sys_newfstat),              /* 440 */
    GENXY(__NR_semctl,               sys_semctl),                /* 442 */
    GENXY(__NR_pselect,              sys_pselect),               /* 436 */
+   NBDXY(__NR___timer_settime50,    sys___timer_settime50),     /* 446 */
    GENXY(__NR_wait4,                sys_wait4),                 /* 449 */
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
    NBDX_(__NR_lwp_park,             sys_lwp_park),              /* 478 */
