@@ -24,6 +24,13 @@ else
    cat
 fi |
 
+# NBetBSD copy FreeBSD to start with
+if $dir/../../tests/os_test netbsd; then
+   awk -f $dir/filter_freebsd.awk
+else
+   cat
+fi |
+
 # And Darwin
 if $dir/../../tests/os_test darwin; then
    awk -f $dir/filter_darwin.awk

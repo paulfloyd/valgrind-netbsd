@@ -30,8 +30,32 @@
 
 # should be in separate file
 {
-   <insert_a_suppression_name_here>
+   NetBSD-ld.so
    Helgrind:Race
    ...
    obj:/libexec/ld.elf_so
+}
+{
+   NetBSD-pthread_exit
+   Helgrind:Race
+   ...
+   fun:pthread_exit
+}
+
+{
+   NetBSD-pthread_barrier_wait
+   Helgrind:Race
+   fun:pthread_barrier_wait
+}
+
+{
+   NetBSD-pthread__park
+   Helgrind:Race
+   fun:pthread__park
+}
+
+{
+   NetBSD-ptghread_once
+   Helgrind:Race
+   fun:pthread_once
 }

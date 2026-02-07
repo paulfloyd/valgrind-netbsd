@@ -3,4 +3,6 @@
 # Exit with status 0 if the system this script runs on supports sem_init()
 # (Linux) and exit with status 1 if not (Darwin).
 
-[ "$(uname)" != "Darwin" ]
+# NetBSD sem_desroy fails and sets errno to ENOSYS
+
+[ "$(uname)" != "Darwin" -a "$(uname)" != "NetBSD" ]
