@@ -101,6 +101,7 @@
 #define __NR_lwp_setprivate     SYS__lwp_setprivate
 #define __NR_lwp_unpark         SYS__lwp_unpark
 #define __NR_lwp_unpark_all     SYS__lwp_unpark_all
+#define __NR_lwp_continue       SYS__lwp_continue        // 314
 #define __NR_lwp_wakeup         SYS__lwp_wakeup
 #define __NR_minherit           SYS_minherit
 #define __NR_mkdir              SYS_mkdir

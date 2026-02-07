@@ -510,6 +510,7 @@ DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
+DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
 /* implementation */
@@ -1358,6 +1359,13 @@ PRE(sys_lwp_wakeup)
    PRE_REG_READ1(int, "_lwp_wakeup", vki_lwpid_t, lwp);
 }
 
+PRE(sys_lwp_continue)
+{
+   /* int _lwp_wakeup(lwpid_t lwp); */
+   PRINT("sys_lwp_continue ( %lu )", ARG1);
+   PRE_REG_READ1(int, "_lwp_continue", vki_lwpid_t, lwp);
+}
+
 PRE(sys_lwp_getprivate)
 {
    /* void* _lwp_getprivate(void); */
@@ -1738,6 +1746,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR_lwp_exit,             sys_lwp_exit),              /* 310 */
    NBDX_(__NR_lwp_self,             sys_lwp_self),              /* 311 */
    NBDXY(__NR_lwp_wait,             sys_lwp_wait),              /* 312 */
+   NBDX_(__NR_lwp_continue,         sys_lwp_continue),          /* 313 */
    NBDX_(__NR_lwp_wakeup,           sys_lwp_wakeup),            /* 315 */
    NBDX_(__NR_lwp_getprivate,       sys_lwp_getprivate),        /* 316 */
    NBDX_(__NR_lwp_setprivate,       sys_lwp_setprivate),        /* 317 */
