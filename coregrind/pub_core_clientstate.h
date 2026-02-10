@@ -37,7 +37,7 @@
 //--------------------------------------------------------------------
 
 #include "pub_tool_clientstate.h"
-#include "pub_tool_vki.h"
+#include "pub_core_vki.h"
 
 // Address space globals
 
