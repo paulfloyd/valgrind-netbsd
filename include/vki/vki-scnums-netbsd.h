@@ -168,7 +168,10 @@
 #define __NR_write              SYS_write
 #define __NR_writev             SYS_writev
 
-#define __NR___timer_settime50  SYS___timer_settime50    // 446
-#define __NR_semtimedop SYS_semtimedop    // 506
+#define __NR__ksem_open         SYS__ksem_open            // 248
+#define __NR__ksem_unlink       SYS__ksem_unlink          // 249
+#define __NR__ksem_close        SYS__ksem_close           // 250
+#define __NR___timer_settime50  SYS___timer_settime50     // 446
+#define __NR_semtimedop         SYS_semtimedop            // 506
 
 #endif

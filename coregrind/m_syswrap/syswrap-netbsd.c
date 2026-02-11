@@ -510,6 +510,9 @@ DECL_TEMPLATE(netbsd, sys_socket);
 DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
 DECL_TEMPLATE(netbsd, sys_timer_delete); // 236
+DECL_TEMPLATE(netbsd, sys__ksem_open); // 248
+DECL_TEMPLATE(netbsd, sys__ksem_unlink); // 249
+DECL_TEMPLATE(netbsd, sys__ksem_close); // 250
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
@@ -1130,6 +1133,36 @@ PRE(sys__ksem_init)
 POST(sys__ksem_init)
 {
    POST_MEM_WRITE(ARG2, sizeof(intptr_t));
+}
+
+PRE(sys__ksem_open)
+{
+   /* int _ksem_open(const char *name, int oflag, mode_t mode, unsigned int value, intptr_t *idp); */
+   PRINT("sys__ksem_open (  %#lx(%s), %ld, %lu, %lu, %#lx )", ARG1, (HChar*)ARG1, SARG2, ARG3, ARG4, ARG5);
+   PRE_REG_READ5(int, "_ksem_open",
+                 const char*, name, int, oflag, vki_mode_t, mode, unsigned int, value, intptr_t *, idp);
+   PRE_MEM_RASCIIZ("_ksem_open(name)", ARG1);
+   PRE_MEM_WRITE("_ksem_open(idp)", ARG5, sizeof(intptr_t));
+}
+
+POST(sys__ksem_open)
+{
+   POST_MEM_WRITE(ARG5, sizeof(intptr_t));
+}
+
+PRE(sys__ksem_unlink)
+{
+   /* int _ksem_unlink(const char *name); */
+   PRINT("sys__ksem_unlink (  %#lx(%s) )", ARG1, (HChar*)ARG1);
+   PRE_REG_READ1(int, "_ksem_open", const char*, name);
+   PRE_MEM_RASCIIZ("_ksem_unlink(name)", ARG1); 
+}
+
+PRE(sys__ksem_close)
+{  
+   /* int _ksem_close(intptr_t id); */
+   PRINT("sys__ksem_close (  %ld )", SARG1); 
+   PRE_REG_READ1(int, "_ksem_close", intptr_t, id)
 }
 
 PRE(sys__ksem_post)
@@ -1760,6 +1793,9 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR_timer_create,         sys_timer_create),          /* 235 */
    NBDX_(__NR_timer_delete,         sys_timer_delete),          /* 236 */
    NBDXY(__NR__ksem_init,           sys__ksem_init),            /* 247 */
+   NBDXY(__NR__ksem_open,           sys__ksem_open),            /* 248 */
+   NBDX_(__NR__ksem_unlink,         sys__ksem_unlink),          /* 249 */
+   NBDX_(__NR__ksem_close,          sys__ksem_close),           /* 250 */
    NBDX_(__NR__ksem_post,           sys__ksem_post),            /* 251 */
    NBDX_(__NR__ksem_wait,           sys__ksem_wait),            /* 252 */
    GENXY(__NR_mq_open,              sys_mq_open),               /* 257 */
