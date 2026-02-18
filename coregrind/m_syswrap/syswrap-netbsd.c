@@ -513,9 +513,13 @@ DECL_TEMPLATE(netbsd, sys_timer_delete); // 236
 DECL_TEMPLATE(netbsd, sys__ksem_open); // 248
 DECL_TEMPLATE(netbsd, sys__ksem_unlink); // 249
 DECL_TEMPLATE(netbsd, sys__ksem_close); // 250
+DECL_TEMPLATE(netbsd, sys__ksem_trywait); // 253
+DECL_TEMPLATE(netbsd, sys__ksem_destroy); // 255
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
+DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
+DECL_TEMPLATE(netbsd, sys___kevent100); // 501
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
 /* implementation */
@@ -851,6 +855,13 @@ POST(sys_pipe2)
    }
 }
 
+PRE(sys_kqueue1)
+{  
+   /* int kqueue1(int flags); */
+   PRINT("sys_kqueue1 ( %ld )", SARG1);
+   PRE_REG_READ1(int, "kqueue1", int, flags);      
+} 
+
 PRE(sys_ioctl)
 {
    /* int
@@ -1163,6 +1174,20 @@ PRE(sys__ksem_close)
    /* int _ksem_close(intptr_t id); */
    PRINT("sys__ksem_close (  %ld )", SARG1); 
    PRE_REG_READ1(int, "_ksem_close", intptr_t, id)
+}
+
+PRE(sys__ksem_trywait)
+{  
+   /* int _ksem_trywait(intptr_t id); */
+   PRINT("sys__ksem_trywait (  %ld )", SARG1); 
+   PRE_REG_READ1(int, "_ksem_trywait", intptr_t, id)
+}
+
+PRE(sys__ksem_destroy)
+{  
+   /* int _ksem_destroy(intptr_t id); */
+   PRINT("sys__ksem_destroy (  %ld )", SARG1); 
+   PRE_REG_READ1(int, "_ksem_destroy", intptr_t, id)
 }
 
 PRE(sys__ksem_post)
@@ -1695,6 +1720,14 @@ PRE(sys_lwp_park)
       PRE_MEM_READ("_lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
 }
 
+PRE(sys___kevent100)
+{
+}
+
+POST(sys___kevent100)
+{
+}
+
 PRE(sys_semtimedop)
 {
    *flags |= SfMayBlock;
@@ -1763,6 +1796,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR_ioctl,                sys_ioctl),                 /*  54 */
    GENX_(__NR_readlink,             sys_readlink),              /*  58 */
    GENX_(__NR_execve,               sys_execve),                /*  59 */
+   GENX_(__NR_umask,                sys_umask),                 /*  60 */
    GENXY(__NR_munmap,               sys_munmap),                /*  73 */
    GENXY(__NR_mprotect,             sys_mprotect),              /*  74 */
    GENX_(__NR_madvise,              sys_madvise),               /*  75 */
@@ -1798,6 +1832,8 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR__ksem_close,          sys__ksem_close),           /* 250 */
    NBDX_(__NR__ksem_post,           sys__ksem_post),            /* 251 */
    NBDX_(__NR__ksem_wait,           sys__ksem_wait),            /* 252 */
+   NBDX_(__NR__ksem_trywait,        sys__ksem_trywait),         /* 253 */
+   NBDX_(__NR__ksem_destroy,        sys__ksem_destroy),         /* 255 */
    GENXY(__NR_mq_open,              sys_mq_open),               /* 257 */
    GENXY(__NR_mq_close,             sys_mq_close),              /* 258 */
    GENX_(__NR_mq_unlink,            sys_mq_unlink),             /* 259 */
@@ -1849,7 +1885,9 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR___timer_settime50,    sys___timer_settime50),     /* 446 */
    GENXY(__NR_wait4,                sys_wait4),                 /* 449 */
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
+   NBDX_(__NR_kqueue1,              sys_kqueue1),               /* 455 */
    NBDX_(__NR_lwp_park,             sys_lwp_park),              /* 478 */
+   NBDXY(__NR___kevent100,          sys___kevent100),           /* 501 */
    NBDX_(__NR_semtimedop,           sys_semtimedop)             /* 506 */
 };
 
