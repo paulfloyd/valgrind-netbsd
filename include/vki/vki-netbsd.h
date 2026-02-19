@@ -291,6 +291,9 @@ typedef ucontext_t     vki_ucontext_t;
 #define VKI_ETXTBSY   ETXTBSY
 #define VKI_EXDEV     EXDEV
 
+#include <sys/event.h>
+#define vki_kevent kevent
+
 #include <sys/exec.h>
 #define vki_ps_strings ps_strings
 
@@ -352,6 +355,9 @@ typedef ucontext_t     vki_ucontext_t;
 #define VKI_RLIMIT_STACK  RLIMIT_STACK
 #define vki_rlimit        rlimit
 #define vki_rusage        rusage
+
+#include <sys/sched.h>
+#define vki_sched_param sched_param
 
 #include <sys/select.h>
 #define vki_fd_set fd_set

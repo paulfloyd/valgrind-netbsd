@@ -517,6 +517,8 @@ DECL_TEMPLATE(netbsd, sys__ksem_trywait); // 253
 DECL_TEMPLATE(netbsd, sys__ksem_destroy); // 255
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
+DECL_TEMPLATE(netbsd, sys__sched_setparam); // 348
+DECL_TEMPLATE(netbsd, sys___pollts50); // 437
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
 DECL_TEMPLATE(netbsd, sys___kevent100); // 501
@@ -1644,6 +1646,15 @@ POST(sys_sigaction_sigtramp)
       POST_MEM_WRITE(ARG3, sizeof(vki_sigaction_fromK_t));
 }
 
+// SYS__sched_setparam 346
+// int _sched_setparam(pid_t pid, lwpid_t lid, int policy, const struct sched_param *params);
+PRE(sys__sched_setparam)
+{
+   PRINT("sys__sched_setparam ( %lu, %lu, %ld, %#lx )", ARG1, ARG2, SARG3, ARG4);
+   PRE_REG_READ4(int, "_sched_setparam", pid_t, pid, lwpid_t, lid, int, policy, const struct sched_param*, params);
+   PRE_MEM_READ("__sched_setparam(params)", ARG4, sizeof(struct vki_sched_param));
+}
+
 PRE(sys_fstatvfs1)
 {
    /* int fstatvfs1(int fd, struct statvfs *buf, int flags); */
@@ -1677,6 +1688,44 @@ POST(sys_socket)
    SysRes r = ML_(generic_POST_sys_socket)(tid, VG_(mk_SysRes_Success)(RES));
    SET_STATUS_from_SysRes(r);
 }
+
+// SYS___pollts50  437
+// int pollts(struct pollfd * restrict fds, nfds_t nfds,
+//            const struct timespec * restrict ts,
+//            const sigset_t * restrict sigmask);
+PRE(sys___pollts50)
+{
+   struct vki_pollfd* fds = (struct vki_pollfd *)(Addr)ARG1;
+   PRINT("sys___pollts50 ( %#lx, %lu, %#lx, %#lx )", ARG1, ARG2, ARG3, ARG4);
+   PRE_REG_READ4(int, "__pollts50", struct pollfd* restrict, fds, nfds_t, nfds,
+                 const struct timespec* restrict, ts,  const sigset_t * restrict, sigmask);
+   if (!ARG3)
+      *flags |= SfMayBlock;
+
+   for (UInt i = 0; i < ARG2; i++) {
+      PRE_MEM_READ( "__pollts50(fds.fd)",
+                    (Addr)(&fds[i].fd), sizeof(fds[i].fd) );
+      if (ML_(safe_to_deref)(&fds[i].fd, sizeof(fds[i].fd)) && fds[i].fd >= 0) {
+         if (!ML_(fd_allowed)(fds[i].fd, "__pollts50(fds.fd)", tid, False)) {
+            /* do nothing? Just let fd_allowed produce a warning? */
+         }
+         PRE_MEM_READ( "__pollts50(fds.events)",
+                       (Addr)(&fds[i].events), sizeof(fds[i].events) );
+      }
+      PRE_MEM_WRITE( "__pollts50(fds.revents)",
+                     (Addr)(&fds[i].revents), sizeof(fds[i].revents) );
+   }
+
+}
+
+POST(sys___pollts50)
+{
+   UInt i;
+   struct vki_pollfd* fds = (struct vki_pollfd *)(Addr)ARG1;
+   for (i = 0; i < ARG2; i++)
+       POST_MEM_WRITE( (Addr)(&fds[i].revents), sizeof(fds[i].revents) );
+}
+
 
 // SYS___timer_settime50   446
 // int __timer_settime50(timer_t timerid, int flags,
@@ -1720,12 +1769,25 @@ PRE(sys_lwp_park)
       PRE_MEM_READ("_lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
 }
 
+// SYS___kevent100 501
+// int __kevent100(int kq, const struct kevent *changelist, size_t nchanges,
+//                 struct kevent *eventlist, size_t nevents,
+//                 const struct timespec *timeout);
 PRE(sys___kevent100)
 {
+   PRINT("sys___kevent100 ( %ld, %#lx, %lu, %#lx, %lu, %#lx )", SARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
+   PRE_REG_READ6(int, "__kevent100", int, kq, const struct kevent*, changelist, size_t, nchanges,
+                 struct kevent*, eventlist, size_t, nevents, const struct timespec*,timeout);
+   PRE_MEM_READ("__kevent100(changelist)", ARG2, ARG3*sizeof(struct vki_kevent));
+   if (ARG4)
+      PRE_MEM_WRITE("__kevent100(eventlist)", ARG4, ARG5*sizeof(struct vki_kevent));
+   PRE_MEM_READ("__kevent100(timeout)", ARG6, sizeof(struct vki_timespec));
+
 }
 
 POST(sys___kevent100)
 {
+   POST_MEM_WRITE(ARG4, ARG5*sizeof(struct vki_kevent));
 }
 
 PRE(sys_semtimedop)
@@ -1866,6 +1928,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR_lwp_setname,          sys_lwp_setname),           /* 323 */
    NBDXY(__NR_lwp_ctl,              sys_lwp_ctl),               /* 325 */
    NBDXY(__NR_sigaction_sigtramp,   sys_sigaction_sigtramp),    /* 340 */
+   NBDX_(__NR__sched_setparam,      sys__sched_setparam),       /* 346 */
    NBDX_(__NR_sched_yield,          sys_sched_yield),           /* 350 */
    NBDXY(__NR_fstatvfs1,            sys_fstatvfs1),             /* 358 */
    GENXY(__NR_getdents,             sys_getdents),              /* 390 */
@@ -1878,6 +1941,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_sigtimedwait,         sys_sigtimedwait),          /* 431 */
    GENX_(__NR_mq_timedsend,         sys_mq_timedsend),          /* 432 */
    GENXY(__NR_mq_timedreceive,      sys_mq_timedreceive),       /* 433 */
+   NBDXY(__NR___pollts50,           sys___pollts50),            /* 437 */
    GENXY(__NR_stat,                 sys_newstat),               /* 439 */
    GENXY(__NR_fstat,                sys_newfstat),              /* 440 */
    GENXY(__NR_semctl,               sys_semctl),                /* 442 */

@@ -61,6 +61,26 @@
 }
 
 {
+   NetBSD-dlopen
+   drd:ConflictingAccess
+   fun:dlopen
+}
+
+{
+   NetBSD-_rtld_bind
+   drd:ConflictingAccess
+   ...
+   fun:_rtld_bind
+}
+
+{
+   NetBSD-getaddrinfo
+   drd:ConflictingAccess
+   ...
+   fun:getaddrinfo
+}
+
+{
    NetBSD-pthread_create
    drd:ConflictingAccess
    ...
