@@ -721,7 +721,7 @@ static void process_option (Clo_Mode mode,
    else if VG_INT_CLO (arg, "--dump-error",       VG_(clo_dump_error))   {}
    else if VG_INT_CLO (arg, "--input-fd",         VG_(clo_input_fd))     {}
    else if VG_INT_CLO (arg, "--sanity-level",     VG_(clo_sanity_level)) {}
-   else if VG_BINT_CLO(arg, "--num-callers",      VG_(clo_backtrace_size), 1,
+   else if VG_BINT_CLO(arg, "--num-callers",      VG_(clo_backtrace_size), 2,
                        VG_DEEPEST_BACKTRACE) {}
    else if VG_BINT_CLO(arg, "--num-transtab-sectors",
                        VG_(clo_num_transtab_sectors),
@@ -1678,13 +1678,13 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
    VG_(cl_psinfo_fd) = -1;
 #endif
 
-#if defined(VGO_linux) || defined(VGO_solaris)
+#if defined(VGO_linux) || defined(VGO_solaris) || defined(VGO_freebsd)
    if (!need_help) {
       HChar  buf[50];   // large enough
       HChar  buf2[VG_(mkstemp_fullname_bufsz)(sizeof buf - 1)];
       Int    fd, r;
 
-#if defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE)
+#if defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE) || defined(VGO_freebsd)
       /* Fake /proc/<pid>/cmdline only on Linux and Solaris if supported. */
       HChar  nul[1];
       const HChar* exename;
@@ -1717,7 +1717,9 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
          VG_(err_config_error)("Can't delete client cmdline file in %s\n", buf2);
 
       VG_(cl_cmdline_fd) = fd;
-#endif // defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE)
+#endif // defined(VGO_linux) || defined(SOLARIS_PROC_CMDLINE) || defined(VGO_freebsd)
+
+#if !defined(VGO_freebsd)
 
       /* Fake /proc/<pid>/auxv on both Linux and Solaris. */
       VG_(debugLog)(1, "main", "Create fake /proc/<pid>/auxv\n");
@@ -1748,6 +1750,8 @@ Int valgrind_main ( Int argc, HChar **argv, HChar **envp )
          VG_(err_config_error)("Can't delete client auxv file in %s\n", buf2);
 
       VG_(cl_auxv_fd) = fd;
+
+#endif
 
 #if defined(VGO_solaris)
       /* Fake /proc/<pid>/psinfo on Solaris.

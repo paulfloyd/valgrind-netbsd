@@ -376,7 +376,7 @@ extern int * __error(void) __attribute__((weak));
       void* v; \
       \
       DO_INIT; \
-      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED(n);           \
+      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED(n); \
       MALLOC_TRACE(#fnname "(%lu)", n ); \
       \
       v = (void*)VALGRIND_NON_SIMD_CALL1( info.tl_##vg_replacement, n ); \
@@ -441,7 +441,7 @@ extern int * __error(void) __attribute__((weak));
 // that can be replaced using --soname-synonyms.
 
 // malloc
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  ALLOC_or_NULL(VG_Z_LIBSTDCXX_SONAME, malloc,      malloc);
  ALLOC_or_NULL(VG_Z_LIBC_SONAME,      malloc,      malloc);
  ALLOC_or_NULL(SO_SYN_MALLOC,         malloc,      malloc);
@@ -480,7 +480,7 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- new ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator new(unsigned int), not mangled (for gcc 2.96)
  ALLOC_or_BOMB(VG_Z_LIBSTDCXX_SONAME,  builtin_new,    __builtin_new);
  ALLOC_or_BOMB(VG_Z_LIBC_SONAME,       builtin_new,    __builtin_new);
@@ -554,7 +554,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_BOMB_ALIGNED(SO_SYN_MALLOC,         _ZnwmSt11align_val_t, __builtin_new_aligned, NewAligned);
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new(unsigned int, std::align_val_t)
  #if VG_WORDSIZE == 4
   ALLOC_or_BOMB_ALIGNED(VG_Z_LIBSTDCXX_SONAME, _ZnwjSt11align_val_t, __builtin_new_aligned, NewAligned);
@@ -592,8 +592,8 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- new nothrow ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
- // operator new(unsigned, std::nothrow_t const&), GNU mangling
+#if defined(VGO_linux)
+ // operator new(unsigned, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL(VG_Z_LIBSTDCXX_SONAME, _ZnwjRKSt9nothrow_t,  __builtin_new);
   ALLOC_or_NULL(VG_Z_LIBCXX_SONAME,    _ZnwjRKSt9nothrow_t,  __builtin_new);
@@ -608,7 +608,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_NULL(SO_SYN_MALLOC,         _ZnwmRKSt9nothrow_t,  __builtin_new);
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new(unsigned, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL(VG_Z_LIBSTDCXX_SONAME, _ZnwjRKSt9nothrow_t,  __builtin_new);
@@ -661,7 +661,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_NULL_ALIGNED(SO_SYN_MALLOC,         _ZnwmSt11align_val_tRKSt9nothrow_t,  __builtin_new_aligned, NewAligned);
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new(unsigned int, std::align_val_t, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL_ALIGNED(VG_Z_LIBSTDCXX_SONAME, _ZnwjSt11align_val_tRKSt9nothrow_t,  __builtin_new_aligned, NewAligned);
@@ -698,7 +698,7 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- new [] ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator new[](unsigned int), not mangled (for gcc 2.96)
  ALLOC_or_BOMB(VG_Z_LIBSTDCXX_SONAME,  __builtin_vec_new, __builtin_vec_new );
  ALLOC_or_BOMB(VG_Z_LIBC_SONAME,       __builtin_vec_new, __builtin_vec_new );
@@ -717,7 +717,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_BOMB(SO_SYN_MALLOC,         _Znam,             __builtin_vec_new );
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new[](unsigned int)
  #if VG_WORDSIZE == 4
   ALLOC_or_BOMB(VG_Z_LIBSTDCXX_SONAME, _Znaj,             __builtin_vec_new );
@@ -770,7 +770,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_BOMB_ALIGNED(SO_SYN_MALLOC,         _ZnamSt11align_val_t, __builtin_vec_new_aligned, VecNewAligned );
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new[](unsigned int, std::align_val_t)
  #if VG_WORDSIZE == 4
   ALLOC_or_BOMB_ALIGNED(VG_Z_LIBSTDCXX_SONAME, _ZnajSt11align_val_t, __builtin_vec_new_aligned, VecNewAligned );
@@ -809,7 +809,7 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- new [] nothrow ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator new[](unsigned, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL(VG_Z_LIBSTDCXX_SONAME, _ZnajRKSt9nothrow_t, __builtin_vec_new );
@@ -825,7 +825,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_NULL(SO_SYN_MALLOC,         _ZnamRKSt9nothrow_t, __builtin_vec_new );
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new[](unsigned, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL(VG_Z_LIBSTDCXX_SONAME, _ZnajRKSt9nothrow_t, __builtin_vec_new );
@@ -878,7 +878,7 @@ extern int * __error(void) __attribute__((weak));
   ALLOC_or_NULL_ALIGNED(SO_SYN_MALLOC,         _ZnamSt11align_val_tRKSt9nothrow_t, __builtin_vec_new_aligned, VecNewAligned );
  #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator new[](unsigned int, std::align_val_t, std::nothrow_t const&)
  #if VG_WORDSIZE == 4
   ALLOC_or_NULL_ALIGNED(VG_Z_LIBSTDCXX_SONAME, _ZnajSt11align_val_tRKSt9nothrow_t, __builtin_vec_new_aligned, VecNewAligned );
@@ -944,7 +944,7 @@ extern int * __error(void) __attribute__((weak));
    }
 
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  FREE(VG_Z_LIBSTDCXX_SONAME,  free,                 free );
  FREE(VG_Z_LIBC_SONAME,       free,                 free );
  FREE(SO_SYN_MALLOC,          free,                 free );
@@ -1050,7 +1050,7 @@ extern int * __error(void) __attribute__((weak));
 /*---------------------- cfree ----------------------*/
 
 // cfree
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  FREE(VG_Z_LIBSTDCXX_SONAME,  cfree,                free );
  FREE(VG_Z_LIBC_SONAME,       cfree,                free );
  FREE(SO_SYN_MALLOC,          cfree,                free );
@@ -1085,7 +1085,7 @@ extern int * __error(void) __attribute__((weak));
       (void)VALGRIND_NON_SIMD_CALL1( info.tl_##vg_replacement, p ); \
  }
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator delete(void*), not mangled (for gcc 2.96)
  DELETE(VG_Z_LIBSTDCXX_SONAME,   __builtin_delete,     __builtin_delete, DeleteDefault  );
  DELETE(VG_Z_LIBC_SONAME,        __builtin_delete,     __builtin_delete, DeleteDefault  );
@@ -1146,7 +1146,7 @@ extern int * __error(void) __attribute__((weak));
  DELETE_SIZED(SO_SYN_MALLOC,          _ZdlPvm,               __builtin_delete, DeleteSized );
 #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete(void*, unsigned int)
 #if __SIZEOF_SIZE_T__ == 4
  DELETE_SIZED(VG_Z_LIBSTDCXX_SONAME,  _ZdlPvj,               __builtin_delete, DeleteSized );
@@ -1238,7 +1238,7 @@ extern int * __error(void) __attribute__((weak));
  DELETE_SIZED_ALIGNED(SO_SYN_MALLOC,          _ZdlPvmSt11align_val_t,               __builtin_delete_aligned, DeleteSizedAligned );
 #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete(void*, std::align_val_t)
  DELETE_ALIGNED(VG_Z_LIBSTDCXX_SONAME,  _ZdlPvSt11align_val_t, __builtin_delete_aligned, DeleteAligned );
  DELETE_ALIGNED(VG_Z_LIBCXX_SONAME,     _ZdlPvSt11align_val_t, __builtin_delete_aligned, DeleteAligned );
@@ -1288,14 +1288,14 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- delete nothrow ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator delete(void*, std::nothrow_t const&)
  DELETE(VG_Z_LIBSTDCXX_SONAME, _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
  DELETE(VG_Z_LIBCXX_SONAME,    _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
  DELETE(VG_Z_LIBC_SONAME,      _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
  DELETE(SO_SYN_MALLOC,         _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete(void*, std::nothrow_t const&)
  DELETE(VG_Z_LIBSTDCXX_SONAME, _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
  DELETE(VG_Z_LIBCXX_SONAME,    _ZdlPvRKSt9nothrow_t,  __builtin_delete, DeleteDefault );
@@ -1325,7 +1325,7 @@ extern int * __error(void) __attribute__((weak));
 
  // no sized version of this operator
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete(void*, std::align_val_t, std::nothrow_t const&)
  DELETE_ALIGNED(VG_Z_LIBSTDCXX_SONAME, _ZdlPvSt11align_val_tRKSt9nothrow_t,  __builtin_delete_aligned, DeleteAligned );
  DELETE_ALIGNED(VG_Z_LIBCXX_SONAME,    _ZdlPvSt11align_val_tRKSt9nothrow_t,  __builtin_delete_aligned, DeleteAligned );
@@ -1351,7 +1351,7 @@ extern int * __error(void) __attribute__((weak));
 
 
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator delete[](void*), not mangled (for gcc 2.96)
  DELETE(VG_Z_LIBSTDCXX_SONAME,   __builtin_vec_delete, __builtin_vec_delete, VecDeleteDefault );
  DELETE(VG_Z_LIBC_SONAME,        __builtin_vec_delete, __builtin_vec_delete, VecDeleteDefault );
@@ -1361,7 +1361,7 @@ extern int * __error(void) __attribute__((weak));
  DELETE(VG_Z_LIBC_SONAME,       _ZdaPv,               __builtin_vec_delete, VecDeleteDefault );
  DELETE(SO_SYN_MALLOC,          _ZdaPv,               __builtin_vec_delete, VecDeleteDefault );
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete[](void*)
  DELETE(VG_Z_LIBSTDCXX_SONAME,  _ZdaPv,               __builtin_vec_delete, VecDeleteDefault );
  DELETE(VG_Z_LIBCXX_SONAME,     _ZdaPv,               __builtin_vec_delete, VecDeleteDefault );
@@ -1396,7 +1396,7 @@ extern int * __error(void) __attribute__((weak));
  DELETE_SIZED(SO_SYN_MALLOC,          _ZdaPvm,              __builtin_vec_delete, VecDeleteSized );
 #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete[](void*, unsigned int)
   #if __SIZEOF_SIZE_T__ == 4
   DELETE_SIZED(VG_Z_LIBSTDCXX_SONAME,  _ZdaPvj,              __builtin_vec_delete, VecDeleteSized );
@@ -1451,7 +1451,7 @@ extern int * __error(void) __attribute__((weak));
  DELETE_SIZED_ALIGNED(SO_SYN_MALLOC,          _ZdaPvmSt11align_val_t, __builtin_vec_delete_aligned, VecDeleteSizedAligned );
 #endif
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete[](void*, std::align_val_t)
  DELETE_ALIGNED(VG_Z_LIBSTDCXX_SONAME,  _ZdaPvSt11align_val_t, __builtin_vec_delete_aligned, VecDeleteAligned );
  DELETE_ALIGNED(VG_Z_LIBCXX_SONAME,     _ZdaPvSt11align_val_t, __builtin_vec_delete_aligned, VecDeleteAligned );
@@ -1502,14 +1502,14 @@ extern int * __error(void) __attribute__((weak));
 
 /*---------------------- delete [] nothrow ----------------------*/
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  // operator delete[](void*, std::nothrow_t const&)
  DELETE(VG_Z_LIBSTDCXX_SONAME,  _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
  DELETE(VG_Z_LIBCXX_SONAME,     _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
  DELETE(VG_Z_LIBC_SONAME,       _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
  DELETE(SO_SYN_MALLOC,          _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete[](void*, std::nothrow_t const&)
  DELETE(VG_Z_LIBSTDCXX_SONAME,  _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
  DELETE(VG_Z_LIBCXX_SONAME,     _ZdaPvRKSt9nothrow_t, __builtin_vec_delete, VecDeleteDefault );
@@ -1539,7 +1539,7 @@ extern int * __error(void) __attribute__((weak));
 
  // no sized version of this operator
 
-#elif defined(VGO_freebsd) || defined(VGO_netbsd)
+#elif defined(VGO_freebsd)
  // operator delete[](void*, std::align_val_t, std::nothrow_t const&)
  DELETE_ALIGNED(VG_Z_LIBSTDCXX_SONAME,  _ZdaPvSt11align_val_tRKSt9nothrow_t, __builtin_vec_delete_aligned, VecDeleteAligned );
  DELETE_ALIGNED(VG_Z_LIBCXX_SONAME,     _ZdaPvSt11align_val_tRKSt9nothrow_t, __builtin_vec_delete_aligned, VecDeleteAligned );
@@ -1611,7 +1611,7 @@ extern int * __error(void) __attribute__((weak));
       return v; \
    }
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  CALLOC(VG_Z_LIBC_SONAME, calloc);
  CALLOC(SO_SYN_MALLOC,    calloc);
 
@@ -1707,7 +1707,7 @@ extern int * __error(void) __attribute__((weak));
    }
 
 #define REALLOCARRAY(soname, fnname) \
-      \
+ \
     void* VG_REPLACE_FUNCTION_EZU(10092,soname,fnname) \
     ( void* ptrV, SizeT nmemb, SizeT size );\
     void* VG_REPLACE_FUNCTION_EZU(10092,soname,fnname) \
@@ -1729,15 +1729,14 @@ extern int * __error(void) __attribute__((weak));
       MALLOC_TRACE(" = %p\n", v ); \
       if (v == NULL) { \
          if (!(size*nmemb == 0U && info.clo_realloc_zero_bytes_frees == True)) {\
-         VG_REPLACE_FUNCTION_EZU(10050,VG_Z_LIBC_SONAME,free)(ptrV); \
             SET_ERRNO_ENOMEM; \
       } \
    } \
       MALLOC_TRACE(" = %p\n", v ); \
       return v; \
-   }
+ }
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  REALLOC(VG_Z_LIBC_SONAME, realloc);
  REALLOC(SO_SYN_MALLOC,    realloc);
  REALLOCARRAY(VG_Z_LIBC_SONAME, reallocarray);
@@ -1803,46 +1802,46 @@ extern int * __error(void) __attribute__((weak));
 
  /* Probably in the wrong place, this is the function
  called by posix_memalign, at least on macOS 10.13 */
-#define ZONEMEMALIGN(soname, fnname) \
-   \
+#define ZONEMEMALIGN(soname, fnname)                                           \
+                                                                               \
    void* VG_REPLACE_FUNCTION_EZU(10100, soname, fnname)(                       \
       void* zone, SizeT alignment, SizeT n);                                   \
    void* VG_REPLACE_FUNCTION_EZU(10100, soname,                                \
                                  fnname)(void* zone, SizeT alignment, SizeT n) \
-   { \
-      void* v; \
+   {                                                                           \
+      void*                   v;                                               \
       SizeT                   orig_alignment     = alignment;                  \
       struct AlignedAllocInfo aligned_alloc_info = {                           \
          .orig_alignment = alignment,                                          \
          .size           = n,                                                  \
          .alloc_kind     = AllocKindPosixMemalign};                            \
-      \
-      DO_INIT; \
+                                                                               \
+      DO_INIT;                                                                 \
       VERIFY_ALIGNMENT(&aligned_alloc_info);                                   \
-      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED((UWord) zone);	\
-      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED(n); \
+      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED((UWord)zone);                        \
+      TRIGGER_MEMCHECK_ERROR_IF_UNDEFINED(n);                                  \
       MALLOC_TRACE("zone_memalign(%p, %lu, %lu)", zone,                        \
                    alignment, n);                                              \
-      \
+                                                                               \
       if (alignment == 0 || alignment % sizeof(void*) != 0 ||                  \
           (alignment & (alignment - 1)) != 0) {                                \
          SET_ERRNO_EINVAL;                                                     \
          return NULL;                                                          \
       }                                                                        \
-      /* Round up to minimum alignment if necessary. */ \
-      if (alignment < VG_MIN_MALLOC_SZB) \
-         alignment = VG_MIN_MALLOC_SZB; \
-      \
-      /* Round up to nearest power-of-two if necessary (like glibc). */ \
+      /* Round up to minimum alignment if necessary. */                        \
+      if (alignment < VG_MIN_MALLOC_SZB)                                       \
+         alignment = VG_MIN_MALLOC_SZB;                                        \
+                                                                               \
+      /* Round up to nearest power-of-two if necessary (like glibc). */        \
       while (0 != (alignment & (alignment - 1)))                               \
          alignment++;                                                          \
-      \
+                                                                               \
       v = (void*)VALGRIND_NON_SIMD_CALL3(info.tl_memalign, alignment,          \
                                          orig_alignment, n);                   \
-      MALLOC_TRACE(" = %p\n", v ); \
+      MALLOC_TRACE(" = %p\n", v);                                              \
       if (!v)                                                                  \
          SET_ERRNO_ENOMEM;                                                     \
-      return v; \
+      return v;                                                                \
    }
 
 #if defined(VGO_freebsd)
@@ -1957,7 +1956,7 @@ extern int * __error(void) __attribute__((weak));
 
 #endif
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  MEMALIGN(VG_Z_LIBC_SONAME, memalign);
  MEMALIGN(SO_SYN_MALLOC,    memalign);
 
@@ -2015,7 +2014,7 @@ extern int * __error(void) __attribute__((weak));
          pszB, pszB, size); \
    }
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  VALLOC(VG_Z_LIBC_SONAME, valloc);
  VALLOC(SO_SYN_MALLOC, valloc);
 
@@ -2162,7 +2161,7 @@ extern int * __error(void) __attribute__((weak));
       return VKI_ENOMEM; \
    }
 
-#if defined(VGO_linux) || defined(VGO_netbsd)
+#if defined(VGO_linux)
  POSIX_MEMALIGN(VG_Z_LIBC_SONAME, posix_memalign);
  POSIX_MEMALIGN(SO_SYN_MALLOC,    posix_memalign);
 
@@ -2333,7 +2332,7 @@ extern int * __error(void) __attribute__((weak));
     }
 #endif
 
- #if defined(VGO_linux) || defined(VGO_netbsd)
+ #if defined(VGO_linux)
   ALIGNED_ALLOC(VG_Z_LIBC_SONAME, aligned_alloc);
   ALIGNED_ALLOC(SO_SYN_MALLOC,    aligned_alloc);
 

@@ -94,6 +94,20 @@ static void load_client(/*OUT*/ExeInfo *info,
       /*NOTREACHED*/
    }
    VG_(strcpy)(out_exe_name, exe_name);
+   if (VG_(resolved_exename) == NULL) {
+      HChar interp_name[VKI_PATH_MAX];
+      if (VG_(try_get_interp)(exe_name, interp_name, VKI_PATH_MAX)) {
+         exe_name = interp_name;
+      }
+      HChar resolved_name[VKI_PATH_MAX];
+      if (VG_(realpath)(exe_name, resolved_name)) {
+         VG_(resolved_exename) = VG_(strdup)("initimg-solaris.lc.1", resolved_name);
+      } else {
+         /* This should not really happen. realpath tried and failed.
+            So lets just continue with the exe_name as is. */
+         VG_(resolved_exename) = VG_(strdup)("initimg-solaris.lc.2", exe_name);
+      }
+   }
 
    /* Set initial brk values. */
    if (info->ldsoexec) {
