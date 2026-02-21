@@ -521,6 +521,7 @@ DECL_TEMPLATE(netbsd, sys__sched_setparam); // 348
 DECL_TEMPLATE(netbsd, sys___pollts50); // 437
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
+DECL_TEMPLATE(netbsd, sys_readlinkat); // 455
 DECL_TEMPLATE(netbsd, sys___kevent100); // 501
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
@@ -1769,6 +1770,46 @@ PRE(sys_lwp_park)
       PRE_MEM_READ("_lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
 }
 
+// returns whether caller needs to set SfMayBlock in flags
+static Bool do_readlink(const HChar* path, HChar *buf, SizeT bufsize, SyscallStatus* status)
+{
+   HChar name[30];
+   VG_(sprintf)(name, "/proc/%d/exe", VG_(getpid)());
+   if (ML_(safe_to_deref)(path, 1)
+         && (VG_(strcmp)(path, name) == 0
+             || VG_(strcmp)(path, "/proc/curproc/exe") == 0)) {
+      vg_assert(VG_(resolved_exename));
+      Int len = VG_(snprintf)(buf, bufsize, "%s",  VG_(resolved_exename)) + 1;
+      SET_STATUS_Success(len);
+      return False;
+   }
+   return True;
+}
+
+// SYS_readlinkat  469
+// ssize_t readlinkat(int fd, const char * restrict path, char * restrict buf, size_t bufsiz)
+PRE(sys_readlinkat)
+{
+   PRINT("sys_readlinkat ( %" FMT_REGWORD "u, %#" FMT_REGWORD "x(%s), %#" FMT_REGWORD "x, %llu )",
+         ARG1, ARG2, (char*)ARG2, ARG3, (ULong)ARG4);
+   PRE_REG_READ4(ssize_t, "readlinkat",
+                 int, fd, const char *, path, char *, buf, int, bufsize);
+   ML_(fd_at_check_allowed)(SARG1, (const HChar*)ARG2, "readlinkat", tid, status);
+   PRE_MEM_RASCIIZ( "readlinkat(path)", ARG2 );
+   PRE_MEM_WRITE("readlinkat(buf)", ARG3, ARG4);
+
+   if (do_readlink((const HChar *)ARG2, (HChar *)ARG3, (SizeT)ARG4, status)) {
+      // @todo PJF there is still the case where fd refers to / or /proc or /proc/pid
+      // or /proc/curproc and path is relative pid/file, curproc/file or just file
+      *flags |= SfMayBlock;
+   }
+}
+
+POST(sys_readlinkat)
+{
+   POST_MEM_WRITE(ARG3, RES);
+}
+
 // SYS___kevent100 501
 // int __kevent100(int kq, const struct kevent *changelist, size_t nchanges,
 //                 struct kevent *eventlist, size_t nevents,
@@ -1950,6 +1991,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_wait4,                sys_wait4),                 /* 449 */
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
    NBDX_(__NR_kqueue1,              sys_kqueue1),               /* 455 */
+   NBDXY(__NR_readlinkat,           sys_readlinkat),            /* 469 */
    NBDX_(__NR_lwp_park,             sys_lwp_park),              /* 478 */
    NBDXY(__NR___kevent100,          sys___kevent100),           /* 501 */
    NBDX_(__NR_semtimedop,           sys_semtimedop)             /* 506 */
