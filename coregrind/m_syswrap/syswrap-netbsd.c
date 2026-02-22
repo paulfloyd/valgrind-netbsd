@@ -519,6 +519,7 @@ DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
 DECL_TEMPLATE(netbsd, sys__sched_setparam); // 348
 DECL_TEMPLATE(netbsd, sys___pollts50); // 437
+DECL_TEMPLATE(netbsd, sys___lstat50); // 441
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
 DECL_TEMPLATE(netbsd, sys_readlinkat); // 455
@@ -1727,8 +1728,21 @@ POST(sys___pollts50)
        POST_MEM_WRITE( (Addr)(&fds[i].revents), sizeof(fds[i].revents) );
 }
 
+// SYS___lstat50 441
+// int __lstat50(const char * path, struct stat * sb);
+PRE(sys___lstat50)
+{
+   PRINT("sys__lstat50 ( %#" FMT_REGWORD "x(%s), %#" FMT_REGWORD "x )",ARG1,(char *)ARG1,ARG2);
+   PRE_REG_READ2(sb, "__lstat50", const char *, path, struct stat *, sb);
+   PRE_MEM_RASCIIZ( "__lstat50(path)", ARG1 );
+   PRE_MEM_WRITE( "__lstat50(sb)", ARG2, sizeof(struct vki_stat) );
+}
 
-// SYS___timer_settime50   446
+POST(sys___lstat50)
+{
+   POST_MEM_WRITE( ARG2, sizeof(struct vki_stat) );
+}
+
 // int __timer_settime50(timer_t timerid, int flags,
 //                       const struct itimerspec *restrict value,
 //                       struct itimerspec *restrict ovalue);
@@ -1950,7 +1964,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR_vfork,                sys_vfork),                 /* 282 */
    GENXY(__NR_sigprocmask,          sys_sigprocmask),           /* 293 */
    GENX_(__NR_sigsuspend,           sys_sigsuspend),            /* 294 */
-   GENXY(__NR_getcwd,               sys_getcwd),                /* 296 */
+   GENXY(__NR___getcwd,             sys_getcwd),                /* 296 */
    NBDX_(__NR_issetugid,            sys_issetugid),             /* 305 */
    NBDX_(__NR_getcontext,           sys_getcontext),            /* 307 */
    NBDX_(__NR_setcontext,           sys_setcontext),            /* 308 */
@@ -1985,6 +1999,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR___pollts50,           sys___pollts50),            /* 437 */
    GENXY(__NR_stat,                 sys_newstat),               /* 439 */
    GENXY(__NR_fstat,                sys_newfstat),              /* 440 */
+   NBDXY(__NR___lstat50,            sys___lstat50),             /* 441 */
    GENXY(__NR_semctl,               sys_semctl),                /* 442 */
    GENXY(__NR_pselect,              sys_pselect),               /* 436 */
    NBDXY(__NR___timer_settime50,    sys___timer_settime50),     /* 446 */

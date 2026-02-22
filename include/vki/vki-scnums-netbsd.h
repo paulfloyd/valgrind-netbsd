@@ -64,7 +64,7 @@
 #endif
 #define __NR_ftruncate          SYS_ftruncate
 #define __NR_getcontext         SYS_getcontext
-#define __NR_getcwd             SYS___getcwd
+#define __NR___getcwd           SYS___getcwd
 #define __NR_getdents           SYS___getdents30
 #define __NR_getegid            SYS_getegid
 #define __NR_geteuid            SYS_geteuid
@@ -176,6 +176,7 @@
 #define __NR__ksem_destroy      SYS__ksem_destroy         // 255
 #define __NR__sched_setparam    SYS__sched_setparam       // 346
 #define __NR___pollts50         SYS___pollts50            // 437
+#define __NR___lstat50          SYS___lstat50             // 441
 #define __NR___timer_settime50  SYS___timer_settime50     // 446
 #define __NR_kqueue1            SYS_kqueue1               // 455
 #define __NR_readlinkat         SYS_readlinkat            // 469

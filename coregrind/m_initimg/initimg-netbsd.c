@@ -326,7 +326,7 @@ Addr setup_client_stack( void*  init_sp,
                          struct vki_ps_strings** client_pss,
                          Addr   clstack_end,
                          SizeT  clstack_max_size,
-                         const HChar *resolved_exe_name )
+                         const HChar *found_exe_name )
 {
    vg_assert(VG_IS_PAGE_ALIGNED(clstack_end+1));
    vg_assert(VG_(args_for_client));
@@ -334,13 +334,16 @@ Addr setup_client_stack( void*  init_sp,
    /* use our own auxv as a prototype */
    const struct auxv *orig_auxv = find_auxv(init_sp);
 
-   const HChar *exe_name = VG_(find_executable)(VG_(args_the_exename));
    HChar interp_name[VKI_PATH_MAX];
-   if (VG_(try_get_interp)(exe_name, interp_name, VKI_PATH_MAX)) {
-      exe_name = interp_name;
+   if (VG_(try_get_interp)(found_exe_name, interp_name, VKI_PATH_MAX)) {
+      found_exe_name = interp_name;
    }  
    HChar resolved_name[VKI_PATH_MAX];
-   VG_(realpath)(exe_name, resolved_name);
+   if (!VG_(realpath)(found_exe_name, resolved_name)) {
+      /* This should not really happen. realpath tried and failed.
+         So lets just continue with the exe_name as is. */
+      VG_(strcpy)(resolved_name, found_exe_name);
+   }
 
    /* ==================== compute sizes ==================== */
 
@@ -360,7 +363,7 @@ Addr setup_client_stack( void*  init_sp,
    }
 
    /* now scan the args we're given... */
-   stringsize += VG_(strlen)(resolved_exe_name) + 1;
+   stringsize += VG_(strlen)(resolved_name) + 1;
 
    for (Int i = 0; i < VG_(sizeXA)( VG_(args_for_client) ); i++) {
       argc++;
@@ -597,7 +600,7 @@ Addr setup_client_stack( void*  init_sp,
 
          case AT_SUN_EXECNAME:
             /* points to the executable filename */
-            auxv->u.a_ptr = copy_str(&strtab, resolved_exe_name);
+            auxv->u.a_ptr = copy_str(&strtab, resolved_name);
             break;
 
          default:
@@ -751,8 +754,8 @@ IIFinaliseImageInfo VG_(ii_create_image)(IICreateImageInfo iicii,
    ExeInfo info;
    VG_(memset)(&info, 0, sizeof(info));
 
-   HChar resolved_exe_name[VKI_PATH_MAX];
-   load_client(&info, resolved_exe_name, sizeof(resolved_exe_name));
+   HChar found_exe_name[VKI_PATH_MAX];
+   load_client(&info, found_exe_name, sizeof(found_exe_name));
    iifii.initial_client_IP = info.init_ip;
 
    //--------------------------------------------------------------
@@ -797,7 +800,7 @@ IIFinaliseImageInfo VG_(ii_create_image)(IICreateImageInfo iicii,
          = setup_client_stack( init_sp, env,
                                &info, &iifii.client_auxv, &iifii.client_pss,
                                iicii.clstack_end, iifii.clstack_max_size,
-                               resolved_exe_name );
+                               found_exe_name );
 
       VG_(free)(env);
 
