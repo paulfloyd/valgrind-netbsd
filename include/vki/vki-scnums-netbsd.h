@@ -95,7 +95,7 @@
 #define __NR_lwp_wait           SYS__lwp_wait            // 312
 #define __NR_lwp_getprivate     SYS__lwp_getprivate
 #define __NR_lwp_kill           SYS__lwp_kill
-#define __NR_lwp_park           SYS____lwp_park60
+#define __NR_compat_50__lwp_park SYS_compat_50__lwp_park // 320
 #define __NR_lwp_self           SYS__lwp_self
 #define __NR_lwp_setname        SYS__lwp_setname
 #define __NR_lwp_setprivate     SYS__lwp_setprivate
@@ -180,6 +180,7 @@
 #define __NR___timer_settime50  SYS___timer_settime50     // 446
 #define __NR_kqueue1            SYS_kqueue1               // 455
 #define __NR_readlinkat         SYS_readlinkat            // 469
+#define __NR____lwp_park60      SYS____lwp_park60         // 478
 #define __NR___kevent100        SYS___kevent100           // 501
 #define __NR_semtimedop         SYS_semtimedop            // 506
 

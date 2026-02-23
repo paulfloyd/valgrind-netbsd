@@ -507,7 +507,6 @@ DECL_TEMPLATE(netbsd, sys_sched_yield);
 DECL_TEMPLATE(netbsd, sys_sigaction_sigtramp);
 DECL_TEMPLATE(netbsd, sys_fstatvfs1);
 DECL_TEMPLATE(netbsd, sys_socket);
-DECL_TEMPLATE(netbsd, sys_lwp_park);
 DECL_TEMPLATE(netbsd, sys_timer_create); // 235
 DECL_TEMPLATE(netbsd, sys_timer_delete); // 236
 DECL_TEMPLATE(netbsd, sys__ksem_open); // 248
@@ -517,12 +516,14 @@ DECL_TEMPLATE(netbsd, sys__ksem_trywait); // 253
 DECL_TEMPLATE(netbsd, sys__ksem_destroy); // 255
 DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
+DECL_TEMPLATE(netbsd, sys_compat_50__lwp_park); // 320
 DECL_TEMPLATE(netbsd, sys__sched_setparam); // 348
 DECL_TEMPLATE(netbsd, sys___pollts50); // 437
 DECL_TEMPLATE(netbsd, sys___lstat50); // 441
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
 DECL_TEMPLATE(netbsd, sys_readlinkat); // 455
+DECL_TEMPLATE(netbsd, sys____lwp_park60); // 478
 DECL_TEMPLATE(netbsd, sys___kevent100); // 501
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
 
@@ -1510,6 +1511,23 @@ PRE(sys_lwp_detach)
    PRE_REG_READ1(long, "_lwp_detach", vki_lwpid_t, target);
 }
 
+// SYS_compat_50__lwp_park 320
+PRE(sys_compat_50__lwp_park)
+{
+   /* int
+    * compat_50__lwp_park(clockid_t clock_id, int flags, const struct timespec *ts,
+    *     lwpid_t unpark, const void *hint, const void *unparkhint);
+    */
+   *flags |= SfMayBlock;
+   PRINT("sys_compat_50__lwp_park ( %lu, %lu, %#lx, %lu, %#lx, %#lx )",
+         ARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
+   PRE_REG_READ6(int, "compat_50__lwp_park",
+                 vki_clockid_t, clock_id, int, flags, const struct vki_timespec *, ts,
+                 vki_lwpid_t, unpark, const void *, hint, const void *, unparkhint);
+   if (ARG3)
+      PRE_MEM_READ("compat_50__lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
+}
+
 PRE(sys_lwp_unpark)
 {
    /* int
@@ -1743,6 +1761,7 @@ POST(sys___lstat50)
    POST_MEM_WRITE( ARG2, sizeof(struct vki_stat) );
 }
 
+// SYS___timer_settime50   446
 // int __timer_settime50(timer_t timerid, int flags,
 //                       const struct itimerspec *restrict value,
 //                       struct itimerspec *restrict ovalue);
@@ -1768,21 +1787,6 @@ POST(sys___timer_settime50)
    }
 }
 
-PRE(sys_lwp_park)
-{
-   /* int
-    * _lwp_park(clockid_t clock_id, int flags, const struct timespec *ts,
-    *     lwpid_t unpark, const void *hint, const void *unparkhint);
-    */
-   *flags |= SfMayBlock;
-   PRINT("sys_lwp_park ( %lu, %lu, %#lx, %lu, %#lx, %#lx )",
-         ARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
-   PRE_REG_READ6(int, "_lwp_park",
-                 vki_clockid_t, clock_id, int, flags, const struct vki_timespec *, ts,
-                 vki_lwpid_t, unpark, const void *, hint, const void *, unparkhint);
-   if (ARG3)
-      PRE_MEM_READ("_lwp_park(ts)", ARG3, sizeof(struct vki_timespec));
-}
 
 // returns whether caller needs to set SfMayBlock in flags
 static Bool do_readlink(const HChar* path, HChar *buf, SizeT bufsize, SyscallStatus* status)
@@ -1822,6 +1826,23 @@ PRE(sys_readlinkat)
 POST(sys_readlinkat)
 {
    POST_MEM_WRITE(ARG3, RES);
+}
+
+// syscalls.master says
+// compat_60
+// int _lwp_park(const struct timespec *ts,
+//              lwpid_t unpark, const void *hint,
+//              const void *unparkhint); }
+PRE(sys____lwp_park60)
+{
+   *flags |= SfMayBlock;
+   PRINT("sys____lwp_park60 (  %#lx, %lu, %#lx, %#lx )",
+         ARG1, ARG2, ARG3, ARG4);
+   PRE_REG_READ4(int, "___lwp_park60",
+                 const struct vki_timespec *, ts,
+                 vki_lwpid_t, unpark, const void *, hint, const void *, unparkhint);
+   if (ARG1)
+      PRE_MEM_READ("___lwp_park60(ts)", ARG1, sizeof(struct vki_timespec));
 }
 
 // SYS___kevent100 501
@@ -1978,6 +1999,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDX_(__NR_lwp_setprivate,       sys_lwp_setprivate),        /* 317 */
    NBDX_(__NR_lwp_kill,             sys_lwp_kill),              /* 318 */
    NBDX_(__NR_lwp_detach,           sys_lwp_detach),            /* 319 */
+   NBDX_(__NR_compat_50__lwp_park,  sys_compat_50__lwp_park),   /* 320 */
    NBDX_(__NR_lwp_unpark,           sys_lwp_unpark),            /* 321 */
    NBDX_(__NR_lwp_unpark_all,       sys_lwp_unpark_all),        /* 322 */
    NBDXY(__NR_lwp_setname,          sys_lwp_setname),           /* 323 */
@@ -2007,7 +2029,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
    NBDX_(__NR_kqueue1,              sys_kqueue1),               /* 455 */
    NBDXY(__NR_readlinkat,           sys_readlinkat),            /* 469 */
-   NBDX_(__NR_lwp_park,             sys_lwp_park),              /* 478 */
+   NBDX_(__NR____lwp_park60,        sys____lwp_park60),         /* 478 */
    NBDXY(__NR___kevent100,          sys___kevent100),           /* 501 */
    NBDX_(__NR_semtimedop,           sys_semtimedop)             /* 506 */
 };

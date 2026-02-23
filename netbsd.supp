@@ -30,11 +30,11 @@
 
 # should be in separate file
 {
-   NetBSD-ld.so
+   NetBSD-pthread_join
    Helgrind:Race
-   ...
-   obj:/libexec/ld.elf_so
+   fun:pthread_join
 }
+
 {
    NetBSD-pthread_exit
    Helgrind:Race
@@ -58,6 +58,44 @@
    NetBSD-pthread_once
    Helgrind:Race
    fun:pthread_once
+}
+
+{
+   NetBSD-je_arena_dalloc_small
+   Helgrind:Race
+   fun:je_arena_dalloc_small
+}
+
+{
+   NetBSD-_rtld_shared_enter
+   Helgrind:Race
+   fun:_rtld_shared_enter
+}
+
+{
+   NetBSD-pthread_barrier_init
+   Helgrind:Race
+   fun:pthread_barrier_init
+}
+
+{
+   NetBSD-pthread_barrier_destroy
+   Helgrind:Race
+   fun:pthread_barrier_destroy
+}
+
+{
+   NetBSD-_rtld_exit
+   Helgrind:Race
+   ...
+   fun:_rtld_exit
+}
+
+{
+   NetBSD-pthread__create_tramp
+   Helgrind:Race
+   fun:mythread_wrapper
+   fun:pthread__create_tramp
 }
 
 {
