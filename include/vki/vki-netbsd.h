@@ -228,6 +228,7 @@ typedef size_t vki_size_t;
 #include <termios.h>
 #define vki_termios termios
 
+// FIXME PJF see kevent comment, we may need timespec50 for 32bit platforms
 #include <time.h>
 #define VKI_CLOCK_MONOTONIC CLOCK_MONOTONIC
 typedef clockid_t           vki_clockid_t;
@@ -291,6 +292,9 @@ typedef ucontext_t     vki_ucontext_t;
 #define VKI_ETXTBSY   ETXTBSY
 #define VKI_EXDEV     EXDEV
 
+// FIXME PJF kevent50 compat
+// I think that this is OK on 64bit platforms
+// but on 32bit platforms we may also need kevent50
 #include <sys/event.h>
 #define vki_kevent kevent
 

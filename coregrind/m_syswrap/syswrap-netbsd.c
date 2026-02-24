@@ -518,6 +518,7 @@ DECL_TEMPLATE(netbsd, sys_vfork); // 282
 DECL_TEMPLATE(netbsd, sys_lwp_continue); // 314
 DECL_TEMPLATE(netbsd, sys_compat_50__lwp_park); // 320
 DECL_TEMPLATE(netbsd, sys__sched_setparam); // 348
+DECL_TEMPLATE(netbsd, sys_compat_100___kevent50); // 435
 DECL_TEMPLATE(netbsd, sys___pollts50); // 437
 DECL_TEMPLATE(netbsd, sys___lstat50); // 441
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
@@ -1709,6 +1710,28 @@ POST(sys_socket)
    SET_STATUS_from_SysRes(r);
 }
 
+// SYS_compat_100___kevent50       435
+// int compat_100___kevent50(int kq,
+//                           const struct kevent100 *changelist, size_t nchanges,
+//                           struct kevent100 *eventlist, size_t nevents,
+//                           const struct timespec50 *timeout)
+PRE(sys_compat_100___kevent50)
+{
+   PRINT("sys_compat_100___kevent50 ( %ld, %#lx, %lu, %#lx, %lu, %#lx )", SARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
+   PRE_REG_READ6(int, "compat_100___kevent50", int, kq, const struct kevent*, changelist, size_t, nchanges,
+                 struct kevent*, eventlist, size_t, nevents, const struct timespec50*,timeout);
+   PRE_MEM_READ("compat_100___kevent50(changelist)", ARG2, ARG3*sizeof(struct vki_kevent));
+   if (ARG4)
+      PRE_MEM_WRITE("__kevent50(eventlist)", ARG4, ARG5*sizeof(struct vki_kevent));
+   PRE_MEM_READ("compat_100___kevent50(timeout)", ARG6, sizeof(struct vki_timespec));
+
+}
+
+POST(sys_compat_100___kevent50)
+{
+   POST_MEM_WRITE(ARG4, ARG5*sizeof(struct vki_kevent));
+}
+
 // SYS___pollts50  437
 // int pollts(struct pollfd * restrict fds, nfds_t nfds,
 //            const struct timespec * restrict ts,
@@ -2018,6 +2041,7 @@ static SyscallTableEntry syscall_table[] = {
    GENXY(__NR_sigtimedwait,         sys_sigtimedwait),          /* 431 */
    GENX_(__NR_mq_timedsend,         sys_mq_timedsend),          /* 432 */
    GENXY(__NR_mq_timedreceive,      sys_mq_timedreceive),       /* 433 */
+   NBDXY(__NR_compat_100___kevent50, sys_compat_100___kevent50), /* 435 */
    NBDXY(__NR___pollts50,           sys___pollts50),            /* 437 */
    GENXY(__NR_stat,                 sys_newstat),               /* 439 */
    GENXY(__NR_fstat,                sys_newfstat),              /* 440 */

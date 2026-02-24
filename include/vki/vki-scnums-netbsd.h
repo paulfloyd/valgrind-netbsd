@@ -175,6 +175,7 @@
 #define __NR__ksem_trywait      SYS__ksem_trywait         // 253
 #define __NR__ksem_destroy      SYS__ksem_destroy         // 255
 #define __NR__sched_setparam    SYS__sched_setparam       // 346
+#define __NR_compat_100___kevent50 SYS_compat_100___kevent50 // 435
 #define __NR___pollts50         SYS___pollts50            // 437
 #define __NR___lstat50          SYS___lstat50             // 441
 #define __NR___timer_settime50  SYS___timer_settime50     // 446
