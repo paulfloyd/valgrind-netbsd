@@ -88,12 +88,6 @@ static void load_client ( /*MOD*/ExeInfo* info,
    }
    VG_(strcpy)(out_exe_name, exe_name);
 
-   /* Get hold of a file descriptor which refers to the client
-      executable.  This is needed for attaching to GDB. */
-   res = VG_(open)(exe_name, VKI_O_RDONLY, VKI_S_IRUSR);
-   if (!sr_isError(res))
-      VG_(cl_exec_fd) = sr_Res(res);
-
    /* Set initial brk values. */
    VG_(brk_base) = VG_(brk_limit) = VG_PGROUNDUP(info->brkbase);
 }
