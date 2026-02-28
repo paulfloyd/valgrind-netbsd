@@ -119,9 +119,15 @@
 }
 
 {
-   NetBSD-pthread_create
+   NetBSD-_rtld_tls_allocate
    drd:ConflictingAccess
    ...
-   fun:pthread_create
+   fun:_rtld_tls_allocate
 }
 
+{
+   NetBSD-_rtld_exit
+   drd:ConflictingAccess
+   ...
+   fun:_rtld_exit
+}
