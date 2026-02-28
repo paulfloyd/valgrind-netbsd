@@ -524,6 +524,7 @@ DECL_TEMPLATE(netbsd, sys___lstat50); // 441
 DECL_TEMPLATE(netbsd, sys___timer_settime50); // 446
 DECL_TEMPLATE(netbsd, sys_kqueue1); // 455
 DECL_TEMPLATE(netbsd, sys_readlinkat); // 455
+DECL_TEMPLATE(netbsd, sys_posix_spawn); // 474
 DECL_TEMPLATE(netbsd, sys____lwp_park60); // 478
 DECL_TEMPLATE(netbsd, sys___kevent100); // 501
 DECL_TEMPLATE(netbsd, sys_semtimedop); // 506
@@ -1851,6 +1852,270 @@ POST(sys_readlinkat)
    POST_MEM_WRITE(ARG3, RES);
 }
 
+// posix_spawn, copied from Darwin, this is not a complete implementation
+// it has issues similar to rfork
+
+static void pre_argv_envp(Addr a, ThreadId tid, const HChar* s1, const HChar* s2)
+{
+   while (True) {
+      Addr a_deref;
+      Addr* a_p = (Addr*)a;
+      PRE_MEM_READ( s1, (Addr)a_p, sizeof(Addr) );
+      if (!ML_(safe_to_deref)(a_p, sizeof(char*)))
+         return;
+      a_deref = *a_p;
+      if (0 == a_deref)
+         break;
+      PRE_MEM_RASCIIZ( s2, a_deref );
+      a += sizeof(char*);
+   }
+}
+static SysRes simple_pre_exec_check ( const HChar* exe_name,
+                                      Bool trace_this_child )
+{
+   Int fd, ret;
+   SysRes res;
+   Bool setuid_allowed;
+
+   // Check it's readable
+   res = VG_(open)(exe_name, VKI_O_RDONLY, 0);
+   if (sr_isError(res)) {
+      return res;
+   }
+   fd = sr_Res(res);
+   VG_(close)(fd);
+
+   // Check we have execute permissions.  We allow setuid executables
+   // to be run only in the case when we are not simulating them, that
+   // is, they to be run natively.
+   setuid_allowed = trace_this_child  ? False  : True;
+   ret = VG_(check_executable)(NULL/*&is_setuid*/,
+                               exe_name, setuid_allowed);
+   if (0 != ret) {
+      return VG_(mk_SysRes_Error)(ret);
+   }
+   return VG_(mk_SysRes_Success)(0);
+}
+
+
+// __NR_posix_spawn    474
+// int posix_spawn(pid_t *restrict pid, const char *restrict path,
+//                 const posix_spawn_file_actions_t *file_actions,
+//                 const posix_spawnattr_t *restrict attrp, char *const argv[restrict],
+//                 char *const envp[restrict]);
+PRE(sys_posix_spawn)
+{
+   HChar*       path = NULL;       /* path to executable */
+   HChar**      envp = NULL;
+   HChar**      argv = NULL;
+   HChar**      arg2copy;
+   HChar*       launcher_basename = NULL;
+   Int          i, j, tot_args;
+   SysRes       res;
+   Bool         trace_this_child;
+
+   /* args: pid_t* pid
+            const char* path
+            const posix_spawn_file_actions_t* file_actions
+            const posix_spawnattr_t* attr
+            char** argv
+            char** envp
+      (ignoring restrict)
+   */
+   PRINT("posix_spawn( %#lx, %#lx(%s), %#lx, %#lx, %#lx, %#lx )",
+         ARG1, ARG2, ARG2 ? (HChar*)ARG2 : "(null)", ARG3, ARG4, ARG5, ARG6 );
+
+   /* Standard pre-syscall checks */
+
+   PRE_REG_READ6(int, "posix_spawn", vki_pid_t*, pid, char*, path,
+                 vki_posix_spawn_file_actions_t*, file_actions,
+                 vki_posix_spawnattr_t*, attrp,
+                 char**, argv, char**, envp );
+   if (ARG1 != 0) {
+      PRE_MEM_WRITE("posix_spawn(pid)", ARG1, sizeof(vki_pid_t) );
+   }
+   PRE_MEM_RASCIIZ("posix_spawn(path)", ARG2);
+   // DDD: check file_actions
+   if (ARG5 != 0)
+      pre_argv_envp( ARG5, tid, "posix_spawn(argv)",
+                                "posix_spawn(argv[i])" );
+   if (ARG6 != 0)
+      pre_argv_envp( ARG6, tid, "posix_spawn(envp)",
+                                "posix_spawn(envp[i])" );
+
+   if (0)
+   VG_(printf)("posix_spawn( %#lx, %#lx(%s), %#lx, %#lx, %#lx, %#lx )\n",
+         ARG1, ARG2, ARG2 ? (HChar*)ARG2 : "(null)", ARG3, ARG4, ARG5, ARG6 );
+
+   /* Now follows a bunch of logic copied from PRE(sys_execve) in
+      syswrap-generic.c. */
+
+   /* Check that the name at least begins in client-accessible storage. */
+   if (ARG2 == 0 /* obviously bogus */
+       || !VG_(am_is_valid_for_client)( ARG2, 1, VKI_PROT_READ )) {
+      SET_STATUS_Failure( VKI_EFAULT );
+      return;
+   }
+
+   // Decide whether or not we want to follow along
+   { // Make 'child_argv' be a pointer to the child's arg vector
+     // (skipping the exe name)
+     const HChar** child_argv = (const HChar**)ARG5;
+     if (child_argv && child_argv[0] == NULL)
+        child_argv = NULL;
+     trace_this_child = VG_(should_we_trace_this_child)( (HChar*)ARG2, child_argv );
+   }
+
+   // Do the important checks:  it is a file, is executable, permissions are
+   // ok, etc.  We allow setuid executables to run only in the case when
+   // we are not simulating them, that is, they to be run natively.
+   res = simple_pre_exec_check( (const HChar*)ARG2, trace_this_child );
+   if (sr_isError(res)) {
+      SET_STATUS_Failure( sr_Err(res) );
+      return;
+   }
+
+   /* If we're tracing the child, and the launcher name looks bogus
+      (possibly because launcher.c couldn't figure it out, see
+      comments therein) then we have no option but to fail. */
+   if (trace_this_child
+       && (VG_(name_of_launcher) == NULL
+           || VG_(name_of_launcher)[0] != '/')) {
+      SET_STATUS_Failure( VKI_ECHILD ); /* "No child processes" */
+      return;
+   }
+
+   /* Ok.  So let's give it a try. */
+   VG_(debugLog)(1, "syswrap", "Posix_spawn of %s\n", (HChar*)ARG2);
+
+   /* posix_spawn on Darwin is combining the fork and exec in one syscall.
+      So, we should not terminate gdbserver : this is still the parent
+      running, which will terminate its gdbserver when exiting.
+      If the child process is traced, it will start a fresh gdbserver
+      after posix_spawn. */
+
+   // Set up the child's exe path.
+   //
+   if (trace_this_child) {
+
+      // We want to exec the launcher.  Get its pre-remembered path.
+      path = VG_(name_of_launcher);
+      // VG_(name_of_launcher) should have been acquired by m_main at
+      // startup.  The following two assertions should be assured by
+      // the "If we're tracking the child .." test just above here.
+      vg_assert(path);
+      vg_assert(path[0] == '/');
+      launcher_basename = path;
+
+   } else {
+      path = (HChar*)ARG2;
+   }
+
+   // Set up the child's environment.
+   //
+   // Remove the valgrind-specific stuff from the environment so the
+   // child doesn't get vgpreload_core.so, vgpreload_<tool>.so, etc.
+   // This is done unconditionally, since if we are tracing the child,
+   // the child valgrind will set up the appropriate client environment.
+   // Nb: we make a copy of the environment before trying to mangle it
+   // as it might be in read-only memory (this was bug #101881).
+   //
+   // Then, if tracing the child, set VALGRIND_LIB for it.
+   //
+   if (ARG6 == 0) {
+      envp = NULL;
+   } else {
+      envp = VG_(env_clone)( (HChar**)ARG6 );
+      vg_assert(envp);
+      VG_(env_remove_valgrind_env_stuff)( envp, /* ro_strings */ False, NULL);
+   }
+
+   if (trace_this_child) {
+      // Set VALGRIND_LIB in ARG6 (the environment)
+      VG_(env_setenv)( &envp, VALGRIND_LIB, VG_(libdir));
+   }
+
+   // Set up the child's args.  If not tracing it, they are
+   // simply ARG5.  Otherwise, they are
+   //
+   // [launcher_basename] ++ VG_(args_for_valgrind) ++ [ARG2] ++ ARG4[1..]
+   //
+   // except that the first VG_(args_for_valgrind_noexecpass) args
+   // are omitted.
+   //
+   if (!trace_this_child) {
+      argv = (HChar**)ARG5;
+   } else {
+      vg_assert( VG_(args_for_valgrind) );
+      vg_assert( VG_(args_for_valgrind_noexecpass) >= 0 );
+      vg_assert( VG_(args_for_valgrind_noexecpass)
+                   <= VG_(sizeXA)( VG_(args_for_valgrind) ) );
+      /* how many args in total will there be? */
+      // launcher basename
+      tot_args = 1;
+      // V's args
+      tot_args += VG_(sizeXA)( VG_(args_for_valgrind) );
+      tot_args -= VG_(args_for_valgrind_noexecpass);
+      // name of client exe
+      tot_args++;
+      // args for client exe, skipping [0]
+      arg2copy = (HChar**)ARG5;
+      if (arg2copy && arg2copy[0]) {
+         for (i = 1; arg2copy[i]; i++)
+            tot_args++;
+      }
+      // allocate
+      argv = VG_(malloc)( "di.syswrap.pre_sys_execve.1",
+                          (tot_args+1) * sizeof(HChar*) );
+      // copy
+      j = 0;
+      argv[j++] = launcher_basename;
+      for (i = 0; i < VG_(sizeXA)( VG_(args_for_valgrind) ); i++) {
+         if (i < VG_(args_for_valgrind_noexecpass))
+            continue;
+         argv[j++] = * (HChar**) VG_(indexXA)( VG_(args_for_valgrind), i );
+      }
+      argv[j++] = (HChar*)ARG2;
+      if (arg2copy && arg2copy[0])
+         for (i = 1; arg2copy[i]; i++)
+            argv[j++] = arg2copy[i];
+      argv[j++] = NULL;
+      // check
+      vg_assert(j == tot_args+1);
+   }
+
+   /* DDD: sort out the signal state.  What signal
+      state does the child inherit from the parent?  */
+
+   if (0) {
+      HChar **cpp;
+      VG_(printf)("posix_spawn: %s\n", path);
+      for (cpp = argv; cpp && *cpp; cpp++)
+         VG_(printf)("argv: %s\n", *cpp);
+      if (1)
+         for (cpp = envp; cpp && *cpp; cpp++)
+            VG_(printf)("env: %s\n", *cpp);
+   }
+
+   /* Let the call go through as usual.  However, we have to poke
+      the altered arguments back into the argument slots. */
+   ARG2 = (UWord)path;
+   ARG5 = (UWord)argv;
+   ARG6 = (UWord)envp;
+
+   /* not to mention .. */
+   *flags |= SfMayBlock;
+}
+
+POST(sys_posix_spawn)
+{
+   vg_assert(SUCCESS);
+   if (ARG1 != 0) {
+      POST_MEM_WRITE( ARG1, sizeof(vki_pid_t) );
+   }
+}
+
+
 // syscalls.master says
 // compat_60
 // int _lwp_park(const struct timespec *ts,
@@ -2053,6 +2318,7 @@ static SyscallTableEntry syscall_table[] = {
    NBDXY(__NR_pipe2,                sys_pipe2),                 /* 453 */
    NBDX_(__NR_kqueue1,              sys_kqueue1),               /* 455 */
    NBDXY(__NR_readlinkat,           sys_readlinkat),            /* 469 */
+   NBDXY(__NR_posix_spawn,          sys_posix_spawn),           /* 474 */
    NBDX_(__NR____lwp_park60,        sys____lwp_park60),         /* 478 */
    NBDXY(__NR___kevent100,          sys___kevent100),           /* 501 */
    NBDX_(__NR_semtimedop,           sys_semtimedop)             /* 506 */

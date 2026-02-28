@@ -181,8 +181,10 @@
 #define __NR___timer_settime50  SYS___timer_settime50     // 446
 #define __NR_kqueue1            SYS_kqueue1               // 455
 #define __NR_readlinkat         SYS_readlinkat            // 469
+#define __NR_posix_spawn        SYS_posix_spawn           // 474
 #define __NR____lwp_park60      SYS____lwp_park60         // 478
 #define __NR___kevent100        SYS___kevent100           // 501
 #define __NR_semtimedop         SYS_semtimedop            // 506
+
 
 #endif

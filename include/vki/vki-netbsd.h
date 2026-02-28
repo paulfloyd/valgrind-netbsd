@@ -413,6 +413,11 @@ typedef sa_family_t       vki_sa_family_t;
 #define vki_sockaddr      sockaddr
 typedef socklen_t         vki_socklen_t;
 
+#include <sys/spawn.h>
+typedef posix_spawn_file_actions_t vki_posix_spawn_file_actions_t;
+typedef posix_spawnattr_t vki_posix_spawnattr_t;
+
+
 #include <sys/stat.h>
 #define st_atime_nsec st_atimensec
 #define st_mtime_nsec st_mtimensec
