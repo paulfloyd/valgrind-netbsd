@@ -12,3 +12,9 @@
    fun:closefile
 }
 
+{
+   badclose_3
+   CoreError:FdBadClose
+   fun:close
+   fun:main
+}
