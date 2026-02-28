@@ -1500,15 +1500,15 @@ WARNING: of the VALGRIND_DISABLE_ERROR_REPORTING macros.
 
 Thread x:
 Invalid read of size 1
-   at 0x........: err (err_disable4.c:46)
-   by 0x........: child_fn_2 (err_disable4.c:64)
+   at 0x........: err (err_disable4.c:50)
+   by 0x........: child_fn_2 (err_disable4.c:68)
    ...
  Address 0x........ is 5 bytes inside a block of size 10 free'd
    at 0x........: free (vg_replace_malloc.c:...)
-   by 0x........: main (err_disable4.c:81)
+   by 0x........: main (err_disable4.c:85)
  Block was alloc'd at
    at 0x........: malloc (vg_replace_malloc.c:...)
-   by 0x........: main (err_disable4.c:80)
+   by 0x........: main (err_disable4.c:84)
 
 
 -------- Got 498 errors (expected 498 ==> PASS) ------
