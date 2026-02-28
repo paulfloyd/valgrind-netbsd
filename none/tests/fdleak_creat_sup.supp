@@ -25,3 +25,9 @@
    fun:main
 }
 
+{
+   sup5
+   CoreError:FdNotClosed
+   fun:open
+}
+
