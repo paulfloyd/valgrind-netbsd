@@ -1,4 +1,5 @@
-prereq: test -e std_list && ./supported_libpthread
+# tends to hang in VirtualBox with NetBSD
+prereq: test -e std_list && ./supported_libpthread && ! ../../tests/os_test netbsd
 vgopts: --check-stack-var=yes --show-confl-seg=no
 prog: std_list
 stderr_filter: filter_stderr

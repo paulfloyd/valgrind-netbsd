@@ -111,3 +111,31 @@
    fun:main
 }
 
+{
+   sup12
+   CoreError:FdNotClosed
+   fun:accept
+   fun:main
+}
+
+{
+   sup13
+   CoreError:FdNotClosed
+   fun:__socket30
+   fun:main
+}
+
+{
+   sup14
+   CoreError:FdNotClosed
+   fun:open
+   fun:main
+}
+
+{
+   sup15
+   CoreError:FdNotClosed
+   fun:recvmsg
+   fun:main
+}
+
