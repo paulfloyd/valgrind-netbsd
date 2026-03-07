@@ -38,7 +38,7 @@ void nearly_main ( void )
          is reported in child_fn. */
    pthread_join(child, NULL );
 
-#if !defined(VGO_freebsd)
+#if !defined(VGO_freebsd) && !defined(VGO_netbsd)
    /* Unlocking a totally bogus lock. */
    pthread_mutex_unlock( (pthread_mutex_t*) &bogus[50] ); /* ERROR */
 #endif
