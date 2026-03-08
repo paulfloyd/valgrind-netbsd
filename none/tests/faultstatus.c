@@ -45,7 +45,7 @@
 #elif defined(VGO_netbsd)
 /* However on NetBSD it results in SIGSEGV instead. */
 #  define BUS_ERROR_SIGNAL   SIGSEGV
-#  define BUS_ERROR_SI_CODE  SEGV_MAPERR
+#  define BUS_ERROR_SI_CODE  BUS_ADRERR
 #else
 #  define BUS_ERROR_SI_CODE  BUS_ADRERR
 #endif
@@ -176,6 +176,8 @@ int main()
 			T(1, SIGSEGV,	SEGV_MAPERR,	BADADDR),
 #if defined(VGO_darwin)
 			T(2, SIGBUS,	SEGV_ACCERR,	mapping),
+#elif defined(VGO_netbsd)
+			T(2, SIGSEGV,	SEGV_MAPERR,	mapping),
 #else
 			T(2, SIGSEGV,	SEGV_ACCERR,	mapping),
 #endif

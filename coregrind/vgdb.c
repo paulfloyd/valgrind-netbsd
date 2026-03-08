@@ -910,7 +910,7 @@ void close_connection(int to_pid, int from_pid)
             (join,
              "vgdb error pthread_join invoke_gdbserver_in_valgrind_thread\n");
    }
-#if !defined(VGO_freebsd)
+#if !defined(VGO_freebsd) && !defined(VGO_netbsd)
    if (close(from_pid) != 0)
       ERROR(errno, "close from_pid\n");
 #endif
