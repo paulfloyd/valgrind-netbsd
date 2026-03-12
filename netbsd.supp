@@ -99,6 +99,26 @@
 }
 
 {
+   NetBSD-getaddrinfo
+   Helgrind:Race
+   ...
+   fun:getaddrinfo
+}
+
+{
+   NetBSD-pthread_create
+   Helgrind:Race
+   ...
+   fun:pthread_create
+}
+
+{
+   NetBSD-__libc_cond_signal
+   Helgrind:Race
+   fun:__libc_cond_signal
+}
+
+{
    NetBSD-dlopen
    drd:ConflictingAccess
    fun:dlopen

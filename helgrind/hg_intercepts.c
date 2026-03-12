@@ -1353,6 +1353,15 @@ static int pthread_cond_wait_WRK(pthread_cond_t* cond,
 
    VALGRIND_GET_ORIG_FN(fn);
 
+#if defined(VGO_netbsd)
+   /* NetBSD implements pthread_cond_wait() as a wrapper around
+   pthread_cond_timedwait(..., NULL).  Call through to libc so that
+   Helgrind's pthread_cond_timedwait interceptor performs the
+   synchronization instrumentation exactly once. */
+   CALL_FN_W_WW(ret, fn, cond,mutex);
+   return ret;
+#endif
+
    if (TRACE_PTH_FNS) {
       fprintf(stderr, "<< pthread_cond_wait %p %p", cond, mutex);
       fflush(stderr);
@@ -1467,7 +1476,11 @@ static int pthread_cond_timedwait_WRK(pthread_cond_t* cond,
                 pthread_cond_t*,cond, pthread_mutex_t*,mutex);
    assert(mutex_is_valid == 1 || mutex_is_valid == 0);
 
-   abstime_is_valid = abstime->tv_nsec >= 0 && abstime->tv_nsec < 1000000000;
+   if (abstime) {
+      abstime_is_valid = abstime->tv_nsec >= 0 && abstime->tv_nsec < 1000000000;
+   } else {
+      abstime_is_valid = True;
+   }
 
    /* Tell the tool we're about to drop the mutex.  This reflects the
       fact that in a cond_wait, we show up holding the mutex, and the
